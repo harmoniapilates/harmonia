@@ -1,0 +1,33 @@
+{
+  "_comment": "Modifica questo file per personalizzare l'app. Cambia colori, nome, immagini e testi. Dopo la modifica, ricarica l'app.",
+
+  "business": {
+    "name": "Harmonia",
+    "tagline": "Votre moment de bien-être"
+  },
+
+  "colors": {
+    "background": "#FDFBF7",
+    "surface": "#F6F4EE",
+    "surfaceElevated": "#FFFFFF",
+    "textPrimary": "#2D3748",
+    "textSecondary": "#718096",
+    "border": "#E2E8F0",
+    "divider": "#EDF2F7",
+    "primary": "#7FA15D",
+    "primaryHover": "#658248",
+    "secondary": "#E2725B",
+    "accentSand": "#E5D9C5",
+    "accentMoss": "#8A9A5B",
+    "success": "#38A169",
+    "error": "#E53E3E",
+    "warning": "#DD6B20"
+  },
+
+  "images": {
+    "loginHero": "https://images.unsplash.com/photo-1554244933-d876deb6b2ff?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwzfHx5b2dhJTIwc3R1ZGlvJTIwY2FsbXxlbnwwfHx8fDE3ODI3MjA5OTJ8MA&ixlib=rb-4.1.0&q=85",
+    "yoga": "https://images.unsplash.com/photo-1713201673819-122ab540f947?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwyfHx5b2dhJTIwc3R1ZGlvJTIwY2FsbXxlbnwwfHx8fDE3ODI3MjA5OTJ8MA&ixlib=rb-4.1.0&q=85",
+    "pilates": "https://images.unsplash.com/photo-1651077837628-52b3247550ae?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHx5b2dhJTIwc3R1ZGlvJTIwY2FsbXxlbnwwfHx8fDE3ODI3MjA5OTJ8MA&ixlib=rb-4.1.0&q=85",
+    "massage": "https://images.pexels.com/photos/9146381/pexels-photo-9146381.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  }
+}
