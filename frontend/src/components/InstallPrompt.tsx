@@ -36,29 +36,56 @@ export default function InstallPrompt() {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     if (isStandalone()) return; // already installed
 
+    let unmounted = false;
+
     (async () => {
       const dismissed = await storage.getItem<number>(DISMISS_KEY, 0);
       if (dismissed && Date.now() - dismissed < DISMISS_DAYS * 24 * 3600 * 1000) return;
+      if (unmounted) return;
 
       if (isIos()) {
         // iOS: show manual instructions after a short delay
-        setTimeout(() => setVisible(true), 1200);
+        setTimeout(() => { if (!unmounted) setVisible(true); }, 500);
         return;
       }
 
-      // Android / desktop Chrome: listen for the install prompt event
-      const handler = (e: Event) => {
-        e.preventDefault();
-        setDeferredPrompt(e as BeforeInstallPromptEvent);
-        setVisible(true);
+      // Android / desktop Chrome: pick up the event captured by the HTML head
+      // (it may have fired before React mounted).
+      const pickup = () => {
+        const evt = (window as any).__harmoniaInstallPrompt as BeforeInstallPromptEvent | null;
+        if (evt) {
+          setDeferredPrompt(evt);
+          setVisible(true);
+        }
       };
-      window.addEventListener("beforeinstallprompt", handler);
-      window.addEventListener("appinstalled", () => {
+      pickup();
+
+      const readyHandler = () => pickup();
+      const promptHandler = (e: Event) => {
+        e.preventDefault();
+        (window as any).__harmoniaInstallPrompt = e as BeforeInstallPromptEvent;
+        pickup();
+      };
+      const installedHandler = () => {
         setVisible(false);
         setDeferredPrompt(null);
-      });
-      return () => window.removeEventListener("beforeinstallprompt", handler);
+        (window as any).__harmoniaInstallPrompt = null;
+      };
+
+      window.addEventListener("__harmoniaInstallReady", readyHandler);
+      window.addEventListener("beforeinstallprompt", promptHandler);
+      window.addEventListener("appinstalled", installedHandler);
+
+      return () => {
+        window.removeEventListener("__harmoniaInstallReady", readyHandler);
+        window.removeEventListener("beforeinstallprompt", promptHandler);
+        window.removeEventListener("appinstalled", installedHandler);
+      };
     })();
+
+    return () => {
+      unmounted = true;
+    };
   }, []);
 
   const install = async () => {

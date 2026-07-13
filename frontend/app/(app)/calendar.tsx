@@ -22,7 +22,6 @@ const CATEGORIES = [
   { key: "all", label: "Tous" },
   { key: "yoga", label: "Yoga" },
   { key: "pilates", label: "Pilates" },
-  { key: "massage", label: "Massages" },
 ];
 
 const FR_MONTHS = [

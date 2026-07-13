@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api, ClassItem, AppSettings } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import ForfaitsManager from "@/src/components/ForfaitsManager";
+import ClientsManager from "@/src/components/ClientsManager";
 import { formatFrenchDateTime } from "@/src/utils/date";
 
 const CATEGORIES = ["yoga", "pilates", "massage"];
@@ -32,18 +33,28 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function toIsoLocal(date: string, time: string): string {
-  const d = new Date(`${date}T${time}:00`);
+// Date field format used across the admin forms: JJ-MM-AAAA (fr-FR).
+function toIsoLocal(dateFr: string, time: string): string {
+  const [D, M, Y] = dateFr.split("-").map(Number);
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date(Y, (M || 1) - 1, D || 1, h || 0, m || 0, 0, 0);
   return d.toISOString();
 }
 
 function fromIso(iso: string): { date: string; time: string } {
   const d = new Date(iso);
   return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    date: `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`,
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
   };
 }
+
+function todayFr(): string {
+  const n = new Date();
+  return `${pad(n.getDate())}-${pad(n.getMonth() + 1)}-${n.getFullYear()}`;
+}
+
+const DATE_FR_RE = /^\d{2}-\d{2}-\d{4}$/;
 
 function fmtDateTime(iso: string) {
   return formatFrenchDateTime(iso);
@@ -87,14 +98,14 @@ const emptyBulkForm = {
 type BulkFormState = typeof emptyBulkForm;
 
 function computeBulkDates(bulk: BulkFormState): string[] {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(bulk.startDate)) return [];
+  if (!DATE_FR_RE.test(bulk.startDate)) return [];
   if (!/^\d{2}:\d{2}$/.test(bulk.time)) return [];
   const weeks = Math.max(1, parseInt(bulk.weeks) || 0);
   const selected = bulk.days
     .map((v, idx) => (v ? DAY_INDEX_TO_JS[idx] : -1))
     .filter((v) => v >= 0);
   if (selected.length === 0) return [];
-  const [Y, M, D] = bulk.startDate.split("-").map(Number);
+  const [D, M, Y] = bulk.startDate.split("-").map(Number);
   const [h, m] = bulk.time.split(":").map(Number);
   const start = new Date(Y, M - 1, D, h, m, 0, 0);
   const dates: string[] = [];
@@ -116,7 +127,7 @@ export default function Admin() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [tab, setTab] = useState<"classes" | "settings">("classes");
+  const [tab, setTab] = useState<"classes" | "forfaits" | "clients" | "settings">("classes");
   const [message, setMessage] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState<BulkFormState>(emptyBulkForm);
@@ -140,16 +151,12 @@ export default function Admin() {
   }, [load]);
 
   const openCreate = () => {
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    setForm({ ...emptyForm, date: dateStr, time: "10:00" });
+    setForm({ ...emptyForm, date: todayFr(), time: "10:00" });
     setModalOpen(true);
   };
 
   const openBulk = () => {
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    setBulkForm({ ...emptyBulkForm, startDate: dateStr });
+    setBulkForm({ ...emptyBulkForm, startDate: todayFr() });
     setBulkModalOpen(true);
   };
 
@@ -211,8 +218,8 @@ export default function Admin() {
       setMessage({ text: "Remplissez titre, date et heure", kind: "error" });
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
-      setMessage({ text: "Date invalide (AAAA-MM-JJ)", kind: "error" });
+    if (!DATE_FR_RE.test(form.date)) {
+      setMessage({ text: "Date invalide (JJ-MM-AAAA)", kind: "error" });
       return;
     }
     if (!/^\d{2}:\d{2}$/.test(form.time)) {
@@ -304,6 +311,13 @@ export default function Admin() {
           <Text style={[styles.tabText, tab === "forfaits" && styles.tabTextActive]}>Forfaits</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          testID="admin-tab-clients"
+          onPress={() => setTab("clients")}
+          style={[styles.tab, tab === "clients" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "clients" && styles.tabTextActive]}>Clients</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="admin-tab-settings"
           onPress={() => setTab("settings")}
           style={[styles.tab, tab === "settings" && styles.tabActive]}
@@ -390,6 +404,10 @@ export default function Admin() {
       ) : tab === "forfaits" ? (
         <ScrollView contentContainerStyle={styles.list}>
           <ForfaitsManager onMessage={setMessage} />
+        </ScrollView>
+      ) : tab === "clients" ? (
+        <ScrollView contentContainerStyle={styles.list}>
+          <ClientsManager onMessage={setMessage} />
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
@@ -529,13 +547,13 @@ export default function Admin() {
 
                 <View style={styles.rowInputs}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.formLabel}>Date (AAAA-MM-JJ)</Text>
+                    <Text style={styles.formLabel}>Date (JJ-MM-AAAA)</Text>
                     <TextInput
                       testID="form-date"
                       value={form.date}
                       onChangeText={(v) => setForm({ ...form, date: v })}
                       style={styles.input}
-                      placeholder="2026-03-15"
+                      placeholder="15-03-2026"
                       placeholderTextColor={colors.textSecondary}
                     />
                   </View>
@@ -693,7 +711,7 @@ export default function Admin() {
                       value={bulkForm.startDate}
                       onChangeText={(v) => setBulkForm({ ...bulkForm, startDate: v })}
                       style={styles.input}
-                      placeholder="AAAA-MM-JJ"
+                      placeholder="JJ-MM-AAAA"
                       placeholderTextColor={colors.textSecondary}
                     />
                   </View>

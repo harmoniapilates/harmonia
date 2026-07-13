@@ -550,6 +550,77 @@ async def list_clients(user: dict = Depends(require_owner)):
     return [{"id": d["id"], "name": d["name"], "email": d["email"]} for d in docs]
 
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
+@api_router.put("/users/{user_id}")
+async def owner_update_user(user_id: str, payload: UserUpdate, user: dict = Depends(require_owner)):
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if target.get("role") == "owner" and target["id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Impossible de modifier un autre propriétaire")
+
+    updates: dict = {}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Le nom ne peut pas être vide")
+        updates["name"] = name
+    if payload.email is not None:
+        new_email = payload.email.lower()
+        if new_email != target["email"]:
+            existing = await db.users.find_one({"email": new_email, "id": {"$ne": user_id}})
+            if existing:
+                raise HTTPException(status_code=400, detail="Email déjà utilisée")
+            updates["email"] = new_email
+    if payload.password is not None:
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
+        updates["hashed_password"] = hash_password(payload.password)
+
+    if updates:
+        await db.users.update_one({"id": user_id}, {"$set": updates})
+        # Keep booking snapshots in sync (name/email displayed to owner)
+        if "name" in updates or "email" in updates:
+            snapshot_updates = {}
+            if "name" in updates:
+                snapshot_updates["user_name"] = updates["name"]
+            if "email" in updates:
+                snapshot_updates["user_email"] = updates["email"]
+            await db.bookings.update_many({"user_id": user_id}, {"$set": snapshot_updates})
+            await db.forfaits.update_many({"user_id": user_id}, {"$set": snapshot_updates})
+
+    fresh = await db.users.find_one({"id": user_id}, {"_id": 0, "hashed_password": 0})
+    return {
+        "id": fresh["id"],
+        "name": fresh["name"],
+        "email": fresh["email"],
+        "role": fresh["role"],
+    }
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@api_router.put("/auth/change-password")
+async def change_own_password(payload: PasswordChange, user: dict = Depends(get_current_user)):
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(payload.current_password, full["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+    await db.users.update_one(
+        {"id": user["id"]}, {"$set": {"hashed_password": hash_password(payload.new_password)}}
+    )
+    return {"ok": True}
+
+
 @api_router.get("/forfaits", response_model=List[ForfaitPublic])
 async def list_forfaits(user: dict = Depends(require_owner)):
     docs = await db.forfaits.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)

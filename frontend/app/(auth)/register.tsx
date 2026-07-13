@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/context/auth";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
@@ -22,8 +23,10 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [adminCode, setAdminCode] = useState("");
+  const [showAdminCode, setShowAdminCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,15 +88,28 @@ export default function Register() {
           />
 
           <Text style={styles.label}>Mot de passe</Text>
-          <TextInput
-            testID="register-password-input"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Au moins 6 caractères"
-            placeholderTextColor={colors.textSecondary}
-            secureTextEntry
-            style={styles.input}
-          />
+          <View style={styles.passwordRow}>
+            <TextInput
+              testID="register-password-input"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Au moins 6 caractères"
+              placeholderTextColor={colors.textSecondary}
+              secureTextEntry={!showPassword}
+              style={[styles.input, styles.passwordInput]}
+            />
+            <TouchableOpacity
+              testID="register-toggle-password"
+              onPress={() => setShowPassword((v) => !v)}
+              style={styles.eyeBtn}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={22}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
@@ -111,15 +127,28 @@ export default function Register() {
           {isOwner && (
             <>
               <Text style={styles.label}>Code Propriétaire</Text>
-              <TextInput
-                testID="register-admin-code-input"
-                value={adminCode}
-                onChangeText={setAdminCode}
-                placeholder="Code secret"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry
-                style={styles.input}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  testID="register-admin-code-input"
+                  value={adminCode}
+                  onChangeText={setAdminCode}
+                  placeholder="Code secret"
+                  placeholderTextColor={colors.textSecondary}
+                  secureTextEntry={!showAdminCode}
+                  style={[styles.input, styles.passwordInput]}
+                />
+                <TouchableOpacity
+                  testID="register-toggle-admin-code"
+                  onPress={() => setShowAdminCode((v) => !v)}
+                  style={styles.eyeBtn}
+                >
+                  <Ionicons
+                    name={showAdminCode ? "eye-off-outline" : "eye-outline"}
+                    size={22}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -210,4 +239,15 @@ const styles = StyleSheet.create({
   footerText: { color: colors.textSecondary },
   footerLink: { color: colors.primary, fontWeight: "600" },
   error: { color: colors.error, marginTop: spacing.sm, fontSize: fontSizes.sm },
+  passwordRow: { position: "relative" },
+  passwordInput: { paddingRight: 48 },
+  eyeBtn: {
+    position: "absolute",
+    right: 8,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

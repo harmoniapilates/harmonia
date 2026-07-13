@@ -54,6 +54,17 @@ export default function Root({ children }: PropsWithChildren) {
                     navigator.serviceWorker.register('./sw.js').catch(function () {});
                   });
                 }
+                // Capture the install prompt event before React mounts, otherwise
+                // it may fire too early and get lost.
+                window.__harmoniaInstallPrompt = null;
+                window.addEventListener('beforeinstallprompt', function (e) {
+                  e.preventDefault();
+                  window.__harmoniaInstallPrompt = e;
+                  window.dispatchEvent(new Event('__harmoniaInstallReady'));
+                });
+                window.addEventListener('appinstalled', function () {
+                  window.__harmoniaInstallPrompt = null;
+                });
                 try {
                   var backend = "${process.env.EXPO_PUBLIC_BACKEND_URL || ""}";
                   if (backend) {

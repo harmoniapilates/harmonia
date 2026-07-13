@@ -79,6 +79,10 @@ export const api = {
 
   // Forfaits
   listClients: () => request<{ id: string; name: string; email: string }[]>("/users/clients"),
+  updateUser: (id: string, payload: { name?: string; email?: string; password?: string }) =>
+    request<User>(`/users/${id}`, { method: "PUT", body: payload }),
+  changeOwnPassword: (payload: { current_password: string; new_password: string }) =>
+    request<{ ok: boolean }>("/auth/change-password", { method: "PUT", body: payload }),
   listForfaits: () => request<Forfait[]>("/forfaits"),
   myForfaits: () => request<Forfait[]>("/forfaits/mine"),
   createForfait: (payload: ForfaitInput) => request<Forfait>("/forfaits", { method: "POST", body: payload }),

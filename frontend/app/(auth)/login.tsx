@@ -9,9 +9,11 @@ import {
   Platform,
   ScrollView,
   ImageBackground,
+  Modal,
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/context/auth";
 import { colors, spacing, radius, fontSizes, images, business } from "@/src/theme";
@@ -21,8 +23,10 @@ export default function Login() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const handle = async () => {
     setError(null);
@@ -77,15 +81,37 @@ export default function Login() {
             />
 
             <Text style={styles.label}>Mot de passe</Text>
-            <TextInput
-              testID="login-password-input"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Votre mot de passe"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry
-              style={styles.input}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                testID="login-password-input"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Votre mot de passe"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry={!showPassword}
+                style={[styles.input, styles.passwordInput]}
+              />
+              <TouchableOpacity
+                testID="login-toggle-password"
+                onPress={() => setShowPassword((v) => !v)}
+                style={styles.eyeBtn}
+                accessibilityLabel={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={22}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              testID="login-forgot-password"
+              onPress={() => setForgotOpen(true)}
+              style={styles.forgotBtn}
+            >
+              <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+            </TouchableOpacity>
 
             {error && (
               <Text testID="login-error" style={styles.error}>
@@ -113,6 +139,36 @@ export default function Login() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={forgotOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setForgotOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Mot de passe oublié</Text>
+              <TouchableOpacity testID="forgot-close" onPress={() => setForgotOpen(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalBody}>
+              Contactez le propriétaire de <Text style={{ fontWeight: "600" }}>{business.name}</Text> pour
+              réinitialiser votre mot de passe. Il pourra vous en attribuer un nouveau directement depuis
+              son espace de gestion.
+            </Text>
+            <TouchableOpacity
+              testID="forgot-ok"
+              onPress={() => setForgotOpen(false)}
+              style={styles.primaryBtn}
+            >
+              <Text style={styles.primaryBtnText}>J&apos;ai compris</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -166,6 +222,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     backgroundColor: colors.background,
   },
+  passwordRow: { position: "relative" },
+  passwordInput: { paddingRight: 48 },
+  eyeBtn: {
+    position: "absolute",
+    right: 8,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  forgotBtn: { alignSelf: "flex-end", marginTop: spacing.sm },
+  forgotText: { color: colors.primary, fontSize: fontSizes.sm, fontWeight: "500" },
   primaryBtn: {
     marginTop: spacing.lg,
     backgroundColor: colors.primary,
@@ -178,4 +247,26 @@ const styles = StyleSheet.create({
   footerText: { color: colors.textSecondary },
   footerLink: { color: colors.primary, fontWeight: "600" },
   error: { color: colors.error, marginTop: spacing.sm, fontSize: fontSizes.sm },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.lg,
+  },
+  modal: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.background,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  modalTitle: { fontSize: fontSizes.xl, color: colors.textPrimary, fontWeight: "500" },
+  modalBody: { color: colors.textPrimary, fontSize: fontSizes.md, lineHeight: 22 },
 });
