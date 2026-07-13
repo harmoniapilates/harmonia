@@ -5,8 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 
-const DISMISS_KEY = "install_prompt_dismissed_at";
-const DISMISS_DAYS = 7; // don't show again for 7 days after dismissal
+const DISMISS_KEY = "install_prompt_dismissed_at_v2";
+const DISMISS_DAYS = 3; // don't show again for 3 days after dismissal
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;

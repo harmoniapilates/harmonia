@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api, ClassItem, AppSettings } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import ForfaitsManager from "@/src/components/ForfaitsManager";
+import { formatFrenchDateTime } from "@/src/utils/date";
 
 const CATEGORIES = ["yoga", "pilates", "massage"];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -45,8 +46,7 @@ function fromIso(iso: string): { date: string; time: string } {
 }
 
 function fmtDateTime(iso: string) {
-  const d = new Date(iso);
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatFrenchDateTime(iso);
 }
 
 const emptyForm = {

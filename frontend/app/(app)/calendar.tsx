@@ -10,12 +10,13 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { api, ClassItem } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes, images } from "@/src/theme";
 import { useAuth } from "@/src/context/auth";
+import { formatFrenchTime } from "@/src/utils/date";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -35,11 +36,6 @@ const FR_MONTHS_SHORT = [
 const FR_DAYS_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 // Grid header starting Monday (French convention)
 const FR_GRID = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 function sameDay(a: Date, b: Date) {
   return (
@@ -104,6 +100,14 @@ export default function Calendar() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Refresh whenever the calendar tab regains focus so newly created classes
+  // (from the admin tab) show up without needing a manual pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const filtered = useMemo(() => {
     if (filter === "all") return classes;
@@ -332,7 +336,7 @@ function ClassCard({
       <View style={styles.cardContent}>
         <View style={styles.cardHeaderRow}>
           <View style={styles.timePill}>
-            <Text style={styles.timePillText}>{formatTime(cls.starts_at)}</Text>
+            <Text style={styles.timePillText}>{formatFrenchTime(cls.starts_at)}</Text>
           </View>
           <View
             style={[

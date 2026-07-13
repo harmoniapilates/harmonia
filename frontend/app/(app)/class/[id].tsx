@@ -15,10 +15,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { api, ClassItem } from "@/src/api/client";
 import { useAuth } from "@/src/context/auth";
 import { colors, spacing, radius, fontSizes, images } from "@/src/theme";
+import { formatFrenchDateTime } from "@/src/utils/date";
 
 function fmt(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} · ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatFrenchDateTime(iso);
 }
 
 function categoryImage(cat: string) {

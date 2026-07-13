@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api, Booking, Forfait } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import { useAuth } from "@/src/context/auth";
+import { formatFrenchDateTime, formatFrenchDate } from "@/src/utils/date";
 
 const STATUS_LABEL: Record<string, string> = {
   confirmed: "Confirmée",
@@ -30,15 +31,11 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function formatDateTime(iso?: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} · ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatFrenchDateTime(iso);
 }
 
 function formatExpiry(iso?: string | null) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return formatFrenchDate(iso) || null;
 }
 
 const CAT_LABELS: Record<string, string> = {

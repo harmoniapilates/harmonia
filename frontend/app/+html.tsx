@@ -39,6 +39,39 @@ export default function Root({ children }: PropsWithChildren) {
             `,
           }}
         />
+
+        {/*
+          Register the service worker (required for the Chrome/Android install prompt)
+          and fire an early warm-up ping to the backend so the free-tier server
+          starts booting before the user reaches the login screen.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function () {
+                    navigator.serviceWorker.register('./sw.js').catch(function () {});
+                  });
+                }
+                try {
+                  var backend = "${process.env.EXPO_PUBLIC_BACKEND_URL || ""}";
+                  if (backend) {
+                    // Fire-and-forget warm-up: wakes Render free-tier before the
+                    // user submits credentials. Short timeout so it never blocks.
+                    var ctrl = new AbortController();
+                    setTimeout(function () { ctrl.abort(); }, 8000);
+                    fetch(backend.replace(/\\/$/, "") + "/api/", {
+                      method: "GET",
+                      cache: "no-store",
+                      signal: ctrl.signal,
+                    }).catch(function () {});
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body
         style={{
