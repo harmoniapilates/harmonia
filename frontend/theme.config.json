@@ -6,6 +6,13 @@
     "tagline": "Votre moment de bien-être"
   },
 
+  "branding": {
+    "_comment": "Personalizza l'icona della scheda del browser (favicon) e l'icona usata quando l'utente installa l'app. Lascia stringa vuota per usare i file PNG in frontend/assets/images/ (favicon.png) e frontend/public/ (icon-192.png, icon-512.png). Se metti un URL (https://...) sostituisce quello di default in tempo reale.",
+    "title": "Harmonia — Réservation",
+    "faviconUrl": "",
+    "appIconUrl": ""
+  },
+
   "colors": {
     "background": "#FDFBF7",
     "surface": "#F6F4EE",

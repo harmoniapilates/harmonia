@@ -4,6 +4,11 @@ export const theme = themeConfig;
 export const colors = themeConfig.colors;
 export const images = themeConfig.images;
 export const business = themeConfig.business;
+export const branding = (themeConfig as any).branding || {
+  title: "",
+  faviconUrl: "",
+  appIconUrl: "",
+};
 
 export const spacing = {
   xs: 4,

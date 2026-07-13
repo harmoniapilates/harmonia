@@ -6,7 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/auth";
-import { colors } from "@/src/theme";
+import { branding, colors } from "@/src/theme";
 import InstallPrompt from "@/src/components/InstallPrompt";
 
 LogBox.ignoreAllLogs(true);
@@ -35,6 +35,13 @@ if (Platform.OS === "web" && typeof window !== "undefined" && typeof document !=
       if (extra) Object.entries(extra).forEach(([k, v]) => link.setAttribute(k, v));
       document.head.appendChild(link);
     };
+    const replaceLink = (rel: string, href: string) => {
+      document.head.querySelectorAll(`link[rel="${rel}"]`).forEach((el) => el.remove());
+      const link = document.createElement("link");
+      link.rel = rel;
+      link.href = href;
+      document.head.appendChild(link);
+    };
     const ensureMeta = (name: string, content: string) => {
       if (document.head.querySelector(`meta[name="${name}"]`)) return;
       const meta = document.createElement("meta");
@@ -43,12 +50,52 @@ if (Platform.OS === "web" && typeof window !== "undefined" && typeof document !=
       document.head.appendChild(meta);
     };
 
+    // Custom browser tab title (from theme.config.json)
+    if (branding?.title) {
+      document.title = branding.title;
+    }
+
+    // Custom favicon override (from theme.config.json → branding.faviconUrl)
+    if (branding?.faviconUrl) {
+      replaceLink("icon", branding.faviconUrl);
+      replaceLink("shortcut icon", branding.faviconUrl);
+    }
+
     // PWA manifest + iOS meta tags
-    ensureLink("manifest", `${normBase}/manifest.webmanifest`);
-    ensureLink("apple-touch-icon", `${normBase}/icon-192.png`, { sizes: "192x192" });
+    if (branding?.appIconUrl) {
+      // Build a dynamic manifest that uses the custom app icon URL so the
+      // PWA install prompt shows the owner's branding instead of the default.
+      const dynamicManifest = {
+        name: (branding as any).title || "Harmonia",
+        short_name: (branding as any).title || "Harmonia",
+        start_url: `${normBase}/`,
+        scope: `${normBase}/`,
+        display: "standalone",
+        background_color: "#FDFBF7",
+        theme_color: "#000000",
+        icons: [
+          { src: branding.appIconUrl, sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: branding.appIconUrl, sizes: "512x512", type: "image/png", purpose: "any maskable" },
+        ],
+      };
+      const dataUri =
+        "data:application/manifest+json;charset=utf-8," +
+        encodeURIComponent(JSON.stringify(dynamicManifest));
+      replaceLink("manifest", dataUri);
+      // Apple touch icon uses the same custom image
+      document.head.querySelectorAll('link[rel="apple-touch-icon"]').forEach((el) => el.remove());
+      const apple = document.createElement("link");
+      apple.rel = "apple-touch-icon";
+      apple.setAttribute("sizes", "192x192");
+      apple.href = branding.appIconUrl;
+      document.head.appendChild(apple);
+    } else {
+      ensureLink("manifest", `${normBase}/manifest.webmanifest`);
+      ensureLink("apple-touch-icon", `${normBase}/icon-192.png`, { sizes: "192x192" });
+    }
     ensureMeta("apple-mobile-web-app-capable", "yes");
     ensureMeta("apple-mobile-web-app-status-bar-style", "default");
-    ensureMeta("apple-mobile-web-app-title", "Harmonia");
+    ensureMeta("apple-mobile-web-app-title", (branding as any)?.title || "Harmonia");
     ensureMeta("theme-color", "#000000");
     ensureMeta("mobile-web-app-capable", "yes");
 
