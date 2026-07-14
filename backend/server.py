@@ -535,6 +535,96 @@ async def confirm_booking(booking_id: str, user: dict = Depends(require_owner)):
     return {"ok": True}
 
 
+async def _apply_forfaits_to_uncovered(user_id: str) -> int:
+    """Try to consume active forfaits for a user's uncovered bookings.
+
+    "Uncovered" = past bookings (starts_at < now) that are attended or
+    confirmed but have no forfait_consumed. Older bookings are covered first.
+    Returns the number of bookings that were newly covered.
+    """
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    query = {
+        "user_id": user_id,
+        "status": {"$in": ["confirmed", "attended"]},
+        "$or": [{"forfait_consumed": None}, {"forfait_consumed": {"$exists": False}}],
+    }
+    bookings = await db.bookings.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    covered = 0
+    for b in bookings:
+        starts_at = (b.get("class_snapshot") or {}).get("starts_at")
+        if not starts_at or starts_at >= now_iso:
+            # Only cover bookings whose class has already started/finished
+            continue
+        category = (b.get("class_snapshot") or {}).get("category")
+        criteria = {
+            "user_id": user_id,
+            "active": True,
+            "remaining_classes": {"$gt": 0},
+            "$and": [
+                {"$or": [{"category": None}, {"category": category}]},
+                {"$or": [{"expires_at": None}, {"expires_at": {"$gt": now_iso}}]},
+            ],
+        }
+        matching = await db.forfaits.find_one(criteria, {"_id": 0}, sort=[("created_at", 1)])
+        if not matching:
+            continue
+        await db.forfaits.update_one(
+            {"id": matching["id"]},
+            {"$inc": {"remaining_classes": -1}},
+        )
+        forfait_info = {
+            "id": matching["id"],
+            "name": matching["name"],
+            "remaining_after": matching["remaining_classes"] - 1,
+        }
+        update = {"forfait_consumed": forfait_info}
+        # If the booking was still "confirmed" but the class is past, promote it
+        # to "attended" so the state is consistent.
+        if b.get("status") == "confirmed":
+            update["status"] = "attended"
+        await db.bookings.update_one({"id": b["id"]}, {"$set": update})
+        covered += 1
+    return covered
+
+
+@api_router.get("/bookings/uncovered")
+async def list_uncovered_bookings(user: dict = Depends(require_owner)):
+    """Return past bookings that were never charged against a forfait,
+    grouped by client. Only bookings whose class already started are listed."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    query = {
+        "status": {"$in": ["confirmed", "attended"]},
+        "$or": [{"forfait_consumed": None}, {"forfait_consumed": {"$exists": False}}],
+        "class_snapshot.starts_at": {"$lt": now_iso},
+    }
+    docs = await db.bookings.find(query, {"_id": 0}).sort("class_snapshot.starts_at", -1).to_list(2000)
+    grouped: dict = {}
+    for d in docs:
+        uid = d["user_id"]
+        snap = d.get("class_snapshot") or {}
+        if uid not in grouped:
+            grouped[uid] = {
+                "user_id": uid,
+                "user_name": d.get("user_name", ""),
+                "user_email": d.get("user_email", ""),
+                "count": 0,
+                "bookings": [],
+            }
+        grouped[uid]["count"] += 1
+        grouped[uid]["bookings"].append(
+            {
+                "id": d["id"],
+                "class_id": d.get("class_id"),
+                "title": snap.get("title"),
+                "category": snap.get("category"),
+                "starts_at": snap.get("starts_at"),
+                "status": d.get("status"),
+            }
+        )
+    return sorted(grouped.values(), key=lambda x: x["count"], reverse=True)
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Wellness Booking API", "status": "ok"}
@@ -680,6 +770,12 @@ async def create_forfait(payload: ForfaitCreate, user: dict = Depends(require_ow
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.forfaits.insert_one(doc.copy())
+    # Retroactively cover past uncovered bookings of this client using this
+    # (or any other active) forfait.
+    try:
+        await _apply_forfaits_to_uncovered(payload.user_id)
+    except Exception:
+        pass
     return ForfaitPublic(**doc)
 
 
@@ -691,6 +787,11 @@ async def update_forfait(forfait_id: str, payload: ForfaitUpdate, user: dict = D
     updates = {k: v for k, v in payload.dict().items() if v is not None}
     if updates:
         await db.forfaits.update_one({"id": forfait_id}, {"$set": updates})
+    # After update, retry covering that client's uncovered bookings
+    try:
+        await _apply_forfaits_to_uncovered(existing["user_id"])
+    except Exception:
+        pass
     fresh = await db.forfaits.find_one({"id": forfait_id}, {"_id": 0})
     return ForfaitPublic(**fresh)
 

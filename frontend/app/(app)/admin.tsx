@@ -20,6 +20,7 @@ import { api, ClassItem, AppSettings } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import ForfaitsManager from "@/src/components/ForfaitsManager";
 import ClientsManager from "@/src/components/ClientsManager";
+import UncoveredBookings from "@/src/components/UncoveredBookings";
 import NativePicker from "@/src/components/NativePicker";
 import { formatFrenchDateTime } from "@/src/utils/date";
 
@@ -131,7 +132,9 @@ export default function Admin() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [tab, setTab] = useState<"classes" | "forfaits" | "clients" | "settings">("classes");
+  const [tab, setTab] = useState<"classes" | "forfaits" | "uncovered" | "clients" | "settings">("classes");
+  const [pendingForfaitClientId, setPendingForfaitClientId] = useState<string | null>(null);
+  const [uncoveredRefreshKey, setUncoveredRefreshKey] = useState(0);
   const [message, setMessage] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState<BulkFormState>(emptyBulkForm);
@@ -315,6 +318,13 @@ export default function Admin() {
           <Text style={[styles.tabText, tab === "forfaits" && styles.tabTextActive]}>Forfaits</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          testID="admin-tab-uncovered"
+          onPress={() => setTab("uncovered")}
+          style={[styles.tab, tab === "uncovered" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "uncovered" && styles.tabTextActive]}>Sans forfait</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="admin-tab-clients"
           onPress={() => setTab("clients")}
           style={[styles.tab, tab === "clients" && styles.tabActive]}
@@ -407,7 +417,25 @@ export default function Admin() {
         </ScrollView>
       ) : tab === "forfaits" ? (
         <ScrollView contentContainerStyle={styles.list}>
-          <ForfaitsManager onMessage={setMessage} />
+          <ForfaitsManager
+            onMessage={(m) => {
+              setMessage(m);
+              if (m.kind === "success") setUncoveredRefreshKey((k) => k + 1);
+            }}
+            initialUserId={pendingForfaitClientId}
+            onInitialHandled={() => setPendingForfaitClientId(null)}
+          />
+        </ScrollView>
+      ) : tab === "uncovered" ? (
+        <ScrollView contentContainerStyle={styles.list}>
+          <UncoveredBookings
+            onMessage={setMessage}
+            refreshKey={uncoveredRefreshKey}
+            onGoToForfait={(uid) => {
+              setPendingForfaitClientId(uid);
+              setTab("forfaits");
+            }}
+          />
         </ScrollView>
       ) : tab === "clients" ? (
         <ScrollView contentContainerStyle={styles.list}>
@@ -1001,7 +1029,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   previewText: { color: colors.textPrimary, fontWeight: "500" },
-  tabs: { flexDirection: "row", paddingHorizontal: spacing.lg, gap: 8, marginBottom: spacing.md },
+  tabs: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.lg, gap: 8, marginBottom: spacing.md },
   tab: {
     paddingVertical: 8,
     paddingHorizontal: 16,

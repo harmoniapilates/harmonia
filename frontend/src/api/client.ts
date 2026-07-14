@@ -83,6 +83,23 @@ export const api = {
     request<User>(`/users/${id}`, { method: "PUT", body: payload }),
   deleteUser: (id: string) =>
     request<{ ok: boolean; deleted_bookings: number }>(`/users/${id}`, { method: "DELETE" }),
+  listUncoveredBookings: () =>
+    request<
+      {
+        user_id: string;
+        user_name: string;
+        user_email: string;
+        count: number;
+        bookings: {
+          id: string;
+          class_id: string;
+          title: string;
+          category: string;
+          starts_at: string;
+          status: string;
+        }[];
+      }[]
+    >("/bookings/uncovered"),
   changeOwnPassword: (payload: { current_password: string; new_password: string }) =>
     request<{ ok: boolean }>("/auth/change-password", { method: "PUT", body: payload }),
   listForfaits: () => request<Forfait[]>("/forfaits"),

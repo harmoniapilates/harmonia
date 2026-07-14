@@ -70,9 +70,11 @@ function isExpired(iso?: string | null): boolean {
 
 type Props = {
   onMessage: (m: { text: string; kind: "success" | "error" }) => void;
+  initialUserId?: string | null;
+  onInitialHandled?: () => void;
 };
 
-export default function ForfaitsManager({ onMessage }: Props) {
+export default function ForfaitsManager({ onMessage, initialUserId, onInitialHandled }: Props) {
   const [forfaits, setForfaits] = useState<Forfait[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string; email: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +98,25 @@ export default function ForfaitsManager({ onMessage }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // If a user id was pre-selected (e.g. jumping from the "Sans forfait" panel),
+  // wait until clients are loaded, then either open the edit form for the
+  // client's existing forfait or open create with that client pre-selected.
+  useEffect(() => {
+    if (!initialUserId) return;
+    if (loading) return;
+    const existing = forfaits.find(
+      (f) => f.user_id === initialUserId && f.active,
+    );
+    if (existing) {
+      openEdit(existing);
+    } else {
+      setForm({ ...emptyForm, user_id: initialUserId });
+      setModalOpen(true);
+    }
+    onInitialHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUserId, loading]);
 
   const openCreate = () => {
     setForm({ ...emptyForm });
