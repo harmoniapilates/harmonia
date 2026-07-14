@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -29,6 +30,7 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +59,51 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
   const closeEdit = () => {
     setEditing(null);
     setNewPassword("");
+  };
+
+  const performDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const res = await api.deleteUser(editing.id);
+      onMessage({
+        text:
+          res.deleted_bookings > 0
+            ? `${editing.name} supprimé (${res.deleted_bookings} réservation(s) annulée(s))`
+            : `${editing.name} supprimé`,
+        kind: "success",
+      });
+      closeEdit();
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur de suppression", kind: "error" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const askDelete = () => {
+    if (!editing) return;
+    if (Platform.OS === "web") {
+      // eslint-disable-next-line no-alert
+      if (
+        typeof window !== "undefined" &&
+        window.confirm(
+          `Supprimer définitivement le compte de ${editing.name} ? Toutes ses réservations et forfaits seront effacés.`,
+        )
+      ) {
+        performDelete();
+      }
+      return;
+    }
+    Alert.alert(
+      "Supprimer le client",
+      `Supprimer définitivement le compte de ${editing.name} ? Toutes ses réservations et forfaits seront effacés.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Supprimer", style: "destructive", onPress: performDelete },
+      ],
+    );
   };
 
   const save = async () => {
@@ -215,13 +262,28 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
                 <TouchableOpacity
                   testID="client-save-btn"
                   onPress={save}
-                  disabled={saving}
-                  style={[styles.primaryBtn, saving && { opacity: 0.6 }]}
+                  disabled={saving || deleting}
+                  style={[styles.primaryBtn, (saving || deleting) && { opacity: 0.6 }]}
                 >
                   <Text style={styles.primaryBtnText}>
                     {saving ? "Enregistrement…" : "Enregistrer"}
                   </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="client-delete-btn"
+                  onPress={askDelete}
+                  disabled={saving || deleting}
+                  style={[styles.dangerBtn, (saving || deleting) && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.error} />
+                  <Text style={styles.dangerBtnText}>
+                    {deleting ? "Suppression…" : "Supprimer ce client"}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.dangerHint}>
+                  Cette action est irréversible et efface aussi ses réservations et forfaits.
+                </Text>
                 <View style={{ height: spacing.xl }} />
               </ScrollView>
             </View>
@@ -342,4 +404,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
+  dangerBtn: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.error,
+    backgroundColor: "transparent",
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  dangerBtnText: { color: colors.error, fontWeight: "600", fontSize: fontSizes.md },
+  dangerHint: {
+    marginTop: 6,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
 });

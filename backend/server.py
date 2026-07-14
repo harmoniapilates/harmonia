@@ -603,6 +603,23 @@ async def owner_update_user(user_id: str, payload: UserUpdate, user: dict = Depe
     }
 
 
+@api_router.delete("/users/{user_id}")
+async def owner_delete_user(user_id: str, user: dict = Depends(require_owner)):
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if target.get("role") == "owner":
+        raise HTTPException(status_code=403, detail="Impossible de supprimer un propriétaire")
+    # Free the seats taken by this user's bookings before removing them
+    bookings = await db.bookings.find({"user_id": user_id}).to_list(1000)
+    for b in bookings:
+        await db.classes.update_one({"id": b["class_id"]}, {"$inc": {"booked_count": -1}})
+    await db.bookings.delete_many({"user_id": user_id})
+    await db.forfaits.delete_many({"user_id": user_id})
+    await db.users.delete_one({"id": user_id})
+    return {"ok": True, "deleted_bookings": len(bookings)}
+
+
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str

@@ -166,17 +166,9 @@ export default function Calendar() {
           <Text style={styles.overline}>BONJOUR {user?.name?.toUpperCase() || ""}</Text>
           <Text style={styles.title}>Calendrier des cours</Text>
         </View>
-        <View style={styles.brandBadge}>
-          <Ionicons name="leaf-outline" size={20} color={colors.primary} />
-        </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipsRow}
-        contentContainerStyle={styles.chipsContent}
-      >
+      <View style={styles.chipsRow}>
         {CATEGORIES.map((c) => {
           const active = filter === c.key;
           return (
@@ -193,7 +185,7 @@ export default function Calendar() {
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
       {message && (
         <View
@@ -418,7 +410,14 @@ const styles = StyleSheet.create({
   },
   togglePillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   toggleText: { color: colors.textPrimary, fontSize: fontSizes.sm, fontWeight: "500" },
-  chipsRow: { maxHeight: 56, flexGrow: 0 },
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   chipsContent: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,

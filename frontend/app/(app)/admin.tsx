@@ -20,6 +20,7 @@ import { api, ClassItem, AppSettings } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import ForfaitsManager from "@/src/components/ForfaitsManager";
 import ClientsManager from "@/src/components/ClientsManager";
+import NativePicker from "@/src/components/NativePicker";
 import { formatFrenchDateTime } from "@/src/utils/date";
 
 const CATEGORIES = ["yoga", "pilates", "massage"];
@@ -33,9 +34,12 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-// Date field format used across the admin forms: JJ-MM-AAAA (fr-FR).
-function toIsoLocal(dateFr: string, time: string): string {
-  const [D, M, Y] = dateFr.split("-").map(Number);
+// The class create/edit form uses native <input type="date"> and
+// <input type="time"> on web, which require canonical formats
+// (YYYY-MM-DD and HH:MM). The browser displays them in the user's locale
+// (French Chrome will show 13/07/2026 and 24h time).
+function toIsoLocal(dateStr: string, time: string): string {
+  const [Y, M, D] = dateStr.split("-").map(Number);
   const [h, m] = time.split(":").map(Number);
   const d = new Date(Y, (M || 1) - 1, D || 1, h || 0, m || 0, 0, 0);
   return d.toISOString();
@@ -44,17 +48,17 @@ function toIsoLocal(dateFr: string, time: string): string {
 function fromIso(iso: string): { date: string; time: string } {
   const d = new Date(iso);
   return {
-    date: `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`,
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
   };
 }
 
-function todayFr(): string {
+function todayIso(): string {
   const n = new Date();
-  return `${pad(n.getDate())}-${pad(n.getMonth() + 1)}-${n.getFullYear()}`;
+  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
 }
 
-const DATE_FR_RE = /^\d{2}-\d{2}-\d{4}$/;
+const DATE_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function fmtDateTime(iso: string) {
   return formatFrenchDateTime(iso);
@@ -98,14 +102,14 @@ const emptyBulkForm = {
 type BulkFormState = typeof emptyBulkForm;
 
 function computeBulkDates(bulk: BulkFormState): string[] {
-  if (!DATE_FR_RE.test(bulk.startDate)) return [];
+  if (!DATE_ISO_RE.test(bulk.startDate)) return [];
   if (!/^\d{2}:\d{2}$/.test(bulk.time)) return [];
   const weeks = Math.max(1, parseInt(bulk.weeks) || 0);
   const selected = bulk.days
     .map((v, idx) => (v ? DAY_INDEX_TO_JS[idx] : -1))
     .filter((v) => v >= 0);
   if (selected.length === 0) return [];
-  const [D, M, Y] = bulk.startDate.split("-").map(Number);
+  const [Y, M, D] = bulk.startDate.split("-").map(Number);
   const [h, m] = bulk.time.split(":").map(Number);
   const start = new Date(Y, M - 1, D, h, m, 0, 0);
   const dates: string[] = [];
@@ -151,12 +155,12 @@ export default function Admin() {
   }, [load]);
 
   const openCreate = () => {
-    setForm({ ...emptyForm, date: todayFr(), time: "10:00" });
+    setForm({ ...emptyForm, date: todayIso(), time: "10:00" });
     setModalOpen(true);
   };
 
   const openBulk = () => {
-    setBulkForm({ ...emptyBulkForm, startDate: todayFr() });
+    setBulkForm({ ...emptyBulkForm, startDate: todayIso() });
     setBulkModalOpen(true);
   };
 
@@ -218,8 +222,8 @@ export default function Admin() {
       setMessage({ text: "Remplissez titre, date et heure", kind: "error" });
       return;
     }
-    if (!DATE_FR_RE.test(form.date)) {
-      setMessage({ text: "Date invalide (JJ-MM-AAAA)", kind: "error" });
+    if (!DATE_ISO_RE.test(form.date)) {
+      setMessage({ text: "Sélectionnez une date valide", kind: "error" });
       return;
     }
     if (!/^\d{2}:\d{2}$/.test(form.time)) {
@@ -547,25 +551,21 @@ export default function Admin() {
 
                 <View style={styles.rowInputs}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.formLabel}>Date (JJ-MM-AAAA)</Text>
-                    <TextInput
+                    <Text style={styles.formLabel}>Date</Text>
+                    <NativePicker
+                      kind="date"
                       testID="form-date"
                       value={form.date}
                       onChangeText={(v) => setForm({ ...form, date: v })}
-                      style={styles.input}
-                      placeholder="15-03-2026"
-                      placeholderTextColor={colors.textSecondary}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.formLabel}>Heure (HH:MM)</Text>
-                    <TextInput
+                    <Text style={styles.formLabel}>Heure</Text>
+                    <NativePicker
+                      kind="time"
                       testID="form-time"
                       value={form.time}
                       onChangeText={(v) => setForm({ ...form, time: v })}
-                      style={styles.input}
-                      placeholder="10:00"
-                      placeholderTextColor={colors.textSecondary}
                     />
                   </View>
                 </View>
@@ -706,24 +706,20 @@ export default function Admin() {
                 <View style={styles.rowInputs}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.formLabel}>Date de début</Text>
-                    <TextInput
+                    <NativePicker
+                      kind="date"
                       testID="bulk-start-date"
                       value={bulkForm.startDate}
                       onChangeText={(v) => setBulkForm({ ...bulkForm, startDate: v })}
-                      style={styles.input}
-                      placeholder="JJ-MM-AAAA"
-                      placeholderTextColor={colors.textSecondary}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.formLabel}>Heure</Text>
-                    <TextInput
+                    <NativePicker
+                      kind="time"
                       testID="bulk-time"
                       value={bulkForm.time}
                       onChangeText={(v) => setBulkForm({ ...bulkForm, time: v })}
-                      style={styles.input}
-                      placeholder="HH:MM"
-                      placeholderTextColor={colors.textSecondary}
                     />
                   </View>
                 </View>
