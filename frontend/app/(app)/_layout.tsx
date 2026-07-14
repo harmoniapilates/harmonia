@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 
 import { useAuth } from "@/src/context/auth";
-import { colors, fontSizes } from "@/src/theme";
+import { colors, fontSizes, texts } from "@/src/theme";
 
 export default function AppLayout() {
   const { user, isLoading } = useAuth();
@@ -38,7 +38,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: "Calendrier",
+          title: texts.tabCalendar,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" color={color} size={size} />
           ),
@@ -47,7 +47,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="bookings"
         options={{
-          title: "Réservations",
+          title: texts.tabBookings,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bookmark-outline" color={color} size={size} />
           ),
@@ -56,7 +56,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="admin"
         options={{
-          title: "Gestion",
+          title: texts.tabAdmin,
           href: isOwner ? "/(app)/admin" : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" color={color} size={size} />
@@ -66,7 +66,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
+          title: texts.tabProfile,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-circle-outline" color={color} size={size} />
           ),

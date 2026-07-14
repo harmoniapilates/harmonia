@@ -6,7 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/auth";
-import { branding, colors } from "@/src/theme";
+import { branding, colors, refreshThemeFromBackend } from "@/src/theme";
 import InstallPrompt from "@/src/components/InstallPrompt";
 
 LogBox.ignoreAllLogs(true);
@@ -129,6 +129,11 @@ if (Platform.OS === "web" && typeof window !== "undefined" && typeof document !=
         signal: controller.signal,
       }).catch(() => {});
     }
+
+    // Fetch fresh branding/theme from the backend. Values are cached in
+    // localStorage and applied on the NEXT page load — the current render still
+    // uses whatever was cached previously (or the built-in defaults).
+    refreshThemeFromBackend(backend).catch(() => {});
   } catch {
     // ignore
   }

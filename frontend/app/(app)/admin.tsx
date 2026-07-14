@@ -21,6 +21,7 @@ import { colors, spacing, radius, fontSizes } from "@/src/theme";
 import ForfaitsManager from "@/src/components/ForfaitsManager";
 import ClientsManager from "@/src/components/ClientsManager";
 import UncoveredBookings from "@/src/components/UncoveredBookings";
+import AppearanceManager from "@/src/components/AppearanceManager";
 import NativePicker from "@/src/components/NativePicker";
 import { formatFrenchDateTime } from "@/src/utils/date";
 
@@ -132,7 +133,7 @@ export default function Admin() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [tab, setTab] = useState<"classes" | "forfaits" | "uncovered" | "clients" | "settings">("classes");
+  const [tab, setTab] = useState<"classes" | "forfaits" | "uncovered" | "clients" | "appearance" | "settings">("classes");
   const [pendingForfaitClientId, setPendingForfaitClientId] = useState<string | null>(null);
   const [uncoveredRefreshKey, setUncoveredRefreshKey] = useState(0);
   const [message, setMessage] = useState<{ text: string; kind: "success" | "error" } | null>(null);
@@ -332,6 +333,13 @@ export default function Admin() {
           <Text style={[styles.tabText, tab === "clients" && styles.tabTextActive]}>Clients</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          testID="admin-tab-appearance"
+          onPress={() => setTab("appearance")}
+          style={[styles.tab, tab === "appearance" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "appearance" && styles.tabTextActive]}>Apparence</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="admin-tab-settings"
           onPress={() => setTab("settings")}
           style={[styles.tab, tab === "settings" && styles.tabActive]}
@@ -440,6 +448,10 @@ export default function Admin() {
       ) : tab === "clients" ? (
         <ScrollView contentContainerStyle={styles.list}>
           <ClientsManager onMessage={setMessage} />
+        </ScrollView>
+      ) : tab === "appearance" ? (
+        <ScrollView contentContainerStyle={styles.list}>
+          <AppearanceManager onMessage={setMessage} />
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>

@@ -1,5 +1,5 @@
 {
-  "_comment": "Modifica questo file per personalizzare l'app. Cambia colori, nome, immagini e testi. Dopo la modifica, ricarica l'app.",
+  "_comment": "⚠️ MODO DI USO — Da questa versione TUTTE le impostazioni visibili (nome, tagline, colori, immagini, TESTI) si modificano direttamente dall'app: apri Gestion → tab 'Apparence' → salva. Questo file contiene solo i valori di DEFAULT che vengono usati la primissima volta o come fallback se il backend non risponde.",
 
   "business": {
     "name": "Harmonia",
@@ -7,7 +7,6 @@
   },
 
   "branding": {
-    "_comment": "Personalizza l'icona della scheda del browser (favicon) e l'icona usata quando l'utente installa l'app. Lascia stringa vuota per usare i file PNG in frontend/assets/images/ (favicon.png) e frontend/public/ (icon-192.png, icon-512.png). Se metti un URL (https://...) sostituisce quello di default in tempo reale.",
     "title": "Harmonia — Réservation",
     "faviconUrl": "",
     "appIconUrl": ""

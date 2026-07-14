@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/context/auth";
-import { colors, spacing, radius, fontSizes, images, business } from "@/src/theme";
+import { colors, spacing, radius, fontSizes, images, business, texts } from "@/src/theme";
 
 export default function Login() {
   const router = useRouter();
@@ -58,17 +58,17 @@ export default function Login() {
             imageStyle={{ borderRadius: radius.xl }}
           >
             <View style={styles.heroOverlay}>
-              <Text style={styles.overline}>BIEN-ÊTRE · CALME</Text>
+              <Text style={styles.overline}>{texts.loginHeroOverline}</Text>
               <Text style={styles.heroTitle}>{business.name}</Text>
               <Text style={styles.heroTagline}>{business.tagline}</Text>
             </View>
           </ImageBackground>
 
           <View style={styles.form}>
-            <Text style={styles.title}>Se connecter</Text>
-            <Text style={styles.subtitle}>Bienvenue. Réservez votre prochaine séance.</Text>
+            <Text style={styles.title}>{texts.loginTitle}</Text>
+            <Text style={styles.subtitle}>{texts.loginSubtitle}</Text>
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{texts.loginEmailLabel}</Text>
             <TextInput
               testID="login-email-input"
               value={email}
@@ -80,7 +80,7 @@ export default function Login() {
               style={styles.input}
             />
 
-            <Text style={styles.label}>Mot de passe</Text>
+            <Text style={styles.label}>{texts.loginPasswordLabel}</Text>
             <View style={styles.passwordRow}>
               <TextInput
                 testID="login-password-input"
@@ -110,7 +110,7 @@ export default function Login() {
               onPress={() => setForgotOpen(true)}
               style={styles.forgotBtn}
             >
-              <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+              <Text style={styles.forgotText}>{texts.loginForgotPassword}</Text>
             </TouchableOpacity>
 
             {error && (
@@ -125,14 +125,14 @@ export default function Login() {
               onPress={handle}
               disabled={loading}
             >
-              <Text style={styles.primaryBtnText}>{loading ? "Connexion..." : "Se connecter"}</Text>
+              <Text style={styles.primaryBtnText}>{loading ? texts.loginSubmitLoading : texts.loginSubmit}</Text>
             </TouchableOpacity>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Pas encore de compte ? </Text>
+              <Text style={styles.footerText}>{texts.loginNoAccount} </Text>
               <Link href="/(auth)/register" asChild>
                 <TouchableOpacity testID="go-to-register">
-                  <Text style={styles.footerLink}>S&apos;inscrire</Text>
+                  <Text style={styles.footerLink}>{texts.loginRegisterLink}</Text>
                 </TouchableOpacity>
               </Link>
             </View>
@@ -149,22 +149,18 @@ export default function Login() {
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Mot de passe oublié</Text>
+              <Text style={styles.modalTitle}>{texts.forgotTitle}</Text>
               <TouchableOpacity testID="forgot-close" onPress={() => setForgotOpen(false)}>
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalBody}>
-              Contactez le propriétaire de <Text style={{ fontWeight: "600" }}>{business.name}</Text> pour
-              réinitialiser votre mot de passe. Il pourra vous en attribuer un nouveau directement depuis
-              son espace de gestion.
-            </Text>
+            <Text style={styles.modalBody}>{texts.forgotBody}</Text>
             <TouchableOpacity
               testID="forgot-ok"
               onPress={() => setForgotOpen(false)}
               style={styles.primaryBtn}
             >
-              <Text style={styles.primaryBtnText}>J&apos;ai compris</Text>
+              <Text style={styles.primaryBtnText}>{texts.forgotOk}</Text>
             </TouchableOpacity>
           </View>
         </View>

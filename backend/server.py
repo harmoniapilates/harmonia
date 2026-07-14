@@ -110,11 +110,96 @@ class BookingPublic(BaseModel):
     class_snapshot: Optional[dict] = None
 
 
+class BrandingColors(BaseModel):
+    background: str = "#FDFBF7"
+    primary: str = "#7FA15D"
+    primaryHover: str = "#658248"
+    secondary: str = "#E2725B"
+    textPrimary: str = "#2D3748"
+    textSecondary: str = "#718096"
+    surface: str = "#F6F4EE"
+    surfaceElevated: str = "#FFFFFF"
+    border: str = "#E2E8F0"
+    divider: str = "#EDF2F7"
+    success: str = "#38A169"
+    error: str = "#E53E3E"
+    warning: str = "#DD6B20"
+
+
+class BrandingImages(BaseModel):
+    loginHero: str = "https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    yoga: str = "https://images.pexels.com/photos/6787357/pexels-photo-6787357.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    pilates: str = "https://images.pexels.com/photos/4325466/pexels-photo-4325466.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    massage: str = "https://images.pexels.com/photos/3757942/pexels-photo-3757942.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    faviconUrl: str = ""
+    appIconUrl: str = ""
+
+
+class BrandingTexts(BaseModel):
+    # Login screen
+    loginHeroOverline: str = "BIEN-ÊTRE · CALME"
+    loginTitle: str = "Se connecter"
+    loginSubtitle: str = "Bienvenue. Réservez votre prochaine séance."
+    loginEmailLabel: str = "Email"
+    loginPasswordLabel: str = "Mot de passe"
+    loginSubmit: str = "Se connecter"
+    loginSubmitLoading: str = "Connexion..."
+    loginForgotPassword: str = "Mot de passe oublié ?"
+    loginNoAccount: str = "Pas encore de compte ?"
+    loginRegisterLink: str = "S'inscrire"
+    forgotTitle: str = "Mot de passe oublié"
+    forgotBody: str = "Contactez le propriétaire pour réinitialiser votre mot de passe. Il pourra vous en attribuer un nouveau directement depuis son espace de gestion."
+    forgotOk: str = "J'ai compris"
+    # Register screen
+    registerTitle: str = "Créer un compte"
+    registerSubtitle: str = "Rejoignez notre communauté."
+    registerNameLabel: str = "Prénom & nom"
+    registerEmailLabel: str = "Email"
+    registerPasswordLabel: str = "Mot de passe"
+    registerOwnerToggle: str = "Je suis propriétaire"
+    registerAdminCodeLabel: str = "Code Propriétaire"
+    registerSubmit: str = "Créer mon compte"
+    registerSubmitLoading: str = "Création..."
+    registerHasAccount: str = "Déjà inscrit ?"
+    registerLoginLink: str = "Se connecter"
+    # Calendar
+    calendarWelcomePrefix: str = "BONJOUR"
+    calendarTitle: str = "Calendrier des cours"
+    calendarFilterAll: str = "Tous"
+    calendarFilterYoga: str = "Yoga"
+    calendarFilterPilates: str = "Pilates"
+    calendarNoClasses: str = "Aucun cours prévu ce jour"
+    # Class detail
+    classBookBtn: str = "Réserver"
+    classBookingConfirmed: str = "Réservation confirmée"
+    classBookingCancel: str = "Annuler ma réservation"
+    classFull: str = "Complet"
+    classAlreadyBooked: str = "Vous avez déjà réservé"
+    # Bookings tab
+    bookingsTitle: str = "Mes réservations"
+    bookingsEmpty: str = "Aucune réservation pour le moment"
+    bookingsForfaitsTitle: str = "Mes forfaits"
+    bookingsForfaitsEmpty: str = "Aucun forfait actif"
+    # Profile
+    profileTitle: str = "Mon compte"
+    profileLogout: str = "Se déconnecter"
+    # Tab bar labels
+    tabCalendar: str = "Calendrier"
+    tabBookings: str = "Réservations"
+    tabProfile: str = "Compte"
+    tabAdmin: str = "Gestion"
+
+
 class AppSettings(BaseModel):
     business_name: str = "Harmonia"
+    business_tagline: str = "Votre moment de bien-être"
+    browser_title: str = "Harmonia — Réservation"
     allow_multiple_bookings: bool = True
     cancellation_window_hours: int = 2
     private_requires_confirmation: bool = True
+    colors: BrandingColors = BrandingColors()
+    images: BrandingImages = BrandingImages()
+    texts: BrandingTexts = BrandingTexts()
 
 
 class ForfaitCreate(BaseModel):
@@ -199,6 +284,25 @@ async def get_settings_doc() -> dict:
         await db.settings.insert_one(defaults.copy())
         defaults.pop("_id", None)
         return defaults
+    # Backfill any missing branding sections (in case the DB was seeded
+    # before the branding fields were introduced).
+    defaults = AppSettings().dict()
+    changed = False
+    for key in ("colors", "images", "texts"):
+        if key not in doc or not isinstance(doc.get(key), dict):
+            doc[key] = defaults[key]
+            changed = True
+        else:
+            merged = {**defaults[key], **doc[key]}
+            if merged != doc[key]:
+                doc[key] = merged
+                changed = True
+    for key in ("business_tagline", "browser_title"):
+        if key not in doc:
+            doc[key] = defaults[key]
+            changed = True
+    if changed:
+        await db.settings.update_one({"id": "global"}, {"$set": doc}, upsert=True)
     return doc
 
 
@@ -251,6 +355,15 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 # ============ Settings Routes ============
+@api_router.get("/settings/public", response_model=AppSettings)
+async def get_public_settings():
+    """Public branding/theme so the app can render the correct look
+    even before the user logs in."""
+    doc = await get_settings_doc()
+    doc.pop("id", None)
+    return AppSettings(**doc)
+
+
 @api_router.get("/settings", response_model=AppSettings)
 async def get_settings(user: dict = Depends(get_current_user)):
     doc = await get_settings_doc()

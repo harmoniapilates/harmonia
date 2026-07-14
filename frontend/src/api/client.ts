@@ -112,11 +112,40 @@ export const api = {
 
 // ---- Types ----
 export type User = { id: string; email: string; name: string; role: "client" | "owner" };
+export type BrandingColors = {
+  background: string;
+  primary: string;
+  primaryHover: string;
+  secondary: string;
+  textPrimary: string;
+  textSecondary: string;
+  surface: string;
+  surfaceElevated: string;
+  border: string;
+  divider: string;
+  success: string;
+  error: string;
+  warning: string;
+};
+export type BrandingImages = {
+  loginHero: string;
+  yoga: string;
+  pilates: string;
+  massage: string;
+  faviconUrl: string;
+  appIconUrl: string;
+};
+export type BrandingTexts = Record<string, string>;
 export type AppSettings = {
   business_name: string;
+  business_tagline: string;
+  browser_title: string;
   allow_multiple_bookings: boolean;
   cancellation_window_hours: number;
   private_requires_confirmation: boolean;
+  colors: BrandingColors;
+  images: BrandingImages;
+  texts: BrandingTexts;
 };
 export type ClassInput = {
   title: string;

@@ -14,14 +14,14 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { api, ClassItem } from "@/src/api/client";
-import { colors, spacing, radius, fontSizes, images } from "@/src/theme";
+import { colors, spacing, radius, fontSizes, images, texts } from "@/src/theme";
 import { useAuth } from "@/src/context/auth";
 import { formatFrenchTime } from "@/src/utils/date";
 
-const CATEGORIES = [
-  { key: "all", label: "Tous" },
-  { key: "yoga", label: "Yoga" },
-  { key: "pilates", label: "Pilates" },
+const CATEGORIES_KEYS = [
+  { key: "all", labelKey: "calendarFilterAll" as const },
+  { key: "yoga", labelKey: "calendarFilterYoga" as const },
+  { key: "pilates", labelKey: "calendarFilterPilates" as const },
 ];
 
 const FR_MONTHS = [
@@ -163,13 +163,13 @@ export default function Calendar() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.overline}>BONJOUR {user?.name?.toUpperCase() || ""}</Text>
-          <Text style={styles.title}>Calendrier des cours</Text>
+          <Text style={styles.overline}>{texts.calendarWelcomePrefix} {user?.name?.toUpperCase() || ""}</Text>
+          <Text style={styles.title}>{texts.calendarTitle}</Text>
         </View>
       </View>
 
       <View style={styles.chipsRow}>
-        {CATEGORIES.map((c) => {
+        {CATEGORIES_KEYS.map((c) => {
           const active = filter === c.key;
           return (
             <TouchableOpacity
@@ -181,7 +181,7 @@ export default function Calendar() {
                 active && { backgroundColor: colors.primary, borderColor: colors.primary },
               ]}
             >
-              <Text style={[styles.chipText, active && { color: "#fff" }]}>{c.label}</Text>
+              <Text style={[styles.chipText, active && { color: "#fff" }]}>{texts[c.labelKey]}</Text>
             </TouchableOpacity>
           );
         })}
