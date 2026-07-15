@@ -76,6 +76,60 @@ export const api = {
       { method: "POST" },
     ),
   confirm: (id: string) => request(`/bookings/${id}/confirm`, { method: "POST" }),
+  unattend: (id: string) =>
+    request<{ ok: boolean; refunded: boolean }>(`/bookings/${id}/unattend`, { method: "POST" }),
+  addAttendee: (classId: string, userId: string, markPresent = true) =>
+    request<any>(`/classes/${classId}/attendance/add`, {
+      method: "POST",
+      body: { user_id: userId, mark_present: markPresent },
+    }),
+  archiveClass: (classId: string) =>
+    request<{ ok: boolean }>(`/classes/${classId}/archive`, { method: "POST" }),
+  restoreClass: (classId: string) =>
+    request<{ ok: boolean }>(`/classes/${classId}/restore`, { method: "POST" }),
+  listArchivedClasses: () =>
+    request<
+      {
+        id: string;
+        title: string;
+        category: string;
+        kind: string;
+        starts_at: string;
+        duration_minutes: number;
+        instructor: string;
+        archived_at: string;
+        attendees: { id: string; name: string; email: string; status: string }[];
+      }[]
+    >("/classes/archived"),
+  archiveForfait: (id: string) =>
+    request<{ ok: boolean }>(`/forfaits/${id}/archive`, { method: "POST" }),
+  restoreForfait: (id: string) =>
+    request<{ ok: boolean }>(`/forfaits/${id}/restore`, { method: "POST" }),
+  listArchivedForfaits: () =>
+    request<
+      {
+        user_id: string;
+        user_name: string;
+        user_email: string;
+        forfaits: {
+          id: string;
+          name: string;
+          category: string | null;
+          total_classes: number;
+          remaining_classes: number;
+          created_at: string;
+          archived_at: string;
+          expires_at: string | null;
+          consumed_bookings: {
+            booking_id: string;
+            class_title: string;
+            category: string;
+            starts_at: string;
+            attended_at: string;
+          }[];
+        }[];
+      }[]
+    >("/forfaits/archived"),
 
   // Forfaits
   listClients: () => request<{ id: string; name: string; email: string }[]>("/users/clients"),
@@ -183,6 +237,13 @@ export type ForfaitInput = {
   category?: string | null;
   expires_at?: string | null;
 };
+export type ConsumedBookingItem = {
+  booking_id: string;
+  class_title: string;
+  category: string;
+  starts_at: string;
+  attended_at: string;
+};
 export type Forfait = {
   id: string;
   user_id: string;
@@ -194,7 +255,9 @@ export type Forfait = {
   category?: string | null;
   expires_at?: string | null;
   active: boolean;
+  archived?: boolean;
   created_at: string;
+  consumed_bookings?: ConsumedBookingItem[];
 };
 export type ForfaitConsumed = {
   id: string;

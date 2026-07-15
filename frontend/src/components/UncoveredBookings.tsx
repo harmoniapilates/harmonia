@@ -31,7 +31,7 @@ type Msg = { text: string; kind: "success" | "error" };
 
 type Props = {
   onMessage: (m: Msg) => void;
-  onGoToForfait: (clientId: string) => void;
+  onGoToForfait: (opts: { userId: string; mode: "create" | "edit" }) => void;
   refreshKey?: number;
 };
 
@@ -131,14 +131,26 @@ export default function UncoveredBookings({ onMessage, onGoToForfait, refreshKey
               </View>
             )}
 
-            <TouchableOpacity
-              testID={`uncovered-fix-${g.user_id}`}
-              onPress={() => onGoToForfait(g.user_id)}
-              style={styles.actionBtn}
-            >
-              <Ionicons name="ticket-outline" size={18} color="#fff" />
-              <Text style={styles.actionBtnText}>Créer / modifier forfait</Text>
-            </TouchableOpacity>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                testID={`uncovered-new-${g.user_id}`}
+                onPress={() => onGoToForfait({ userId: g.user_id, mode: "create" })}
+                style={[styles.actionBtn, styles.actionBtnPrimary]}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                <Text style={styles.actionBtnText}>Nouveau forfait</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID={`uncovered-edit-${g.user_id}`}
+                onPress={() => onGoToForfait({ userId: g.user_id, mode: "edit" })}
+                style={[styles.actionBtn, styles.actionBtnOutline]}
+              >
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.primary }]}>
+                  Modifier forfait
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         );
       })}
@@ -228,15 +240,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: "capitalize",
   },
-  actionBtn: {
+  actionsRow: {
     marginTop: spacing.md,
-    backgroundColor: colors.primary,
-    padding: spacing.md,
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  actionBtn: {
+    flex: 1,
+    minWidth: 150,
+    padding: spacing.sm,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
-  actionBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
+  actionBtnPrimary: { backgroundColor: colors.primary },
+  actionBtnOutline: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  actionBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.sm },
 });

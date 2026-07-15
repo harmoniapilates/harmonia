@@ -219,6 +219,14 @@ class ForfaitUpdate(BaseModel):
     active: Optional[bool] = None
 
 
+class ConsumedBooking(BaseModel):
+    booking_id: str
+    class_title: str = ""
+    category: Optional[str] = None
+    starts_at: Optional[str] = None
+    attended_at: Optional[str] = None
+
+
 class ForfaitPublic(BaseModel):
     id: str
     user_id: str
@@ -231,6 +239,8 @@ class ForfaitPublic(BaseModel):
     expires_at: Optional[str] = None
     active: bool
     created_at: str
+    archived: bool = False
+    consumed_bookings: List[ConsumedBooking] = []
 
 
 # ============ Helpers ============
@@ -401,8 +411,97 @@ async def build_class_public(cls: dict) -> ClassPublic:
 
 @api_router.get("/classes", response_model=List[ClassPublic])
 async def list_classes(user: dict = Depends(get_current_user)):
-    docs = await db.classes.find({}, {"_id": 0}).sort("starts_at", 1).to_list(500)
+    # Lazy auto-archive: any class that finished more than 4h ago is archived
+    # so the calendar view stays clean at the start of a new day even if the
+    # midnight sweep endpoint hasn't been triggered.
+    try:
+        await _auto_archive_classes()
+    except Exception:
+        pass
+    docs = await db.classes.find(
+        {"$or": [{"archived": {"$exists": False}}, {"archived": False}]},
+        {"_id": 0},
+    ).sort("starts_at", 1).to_list(500)
     return [await build_class_public(d) for d in docs]
+
+
+async def _auto_archive_classes() -> int:
+    """Archive classes that ended more than 4 hours ago."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=4)
+    cutoff_iso = cutoff.isoformat()
+    result = await db.classes.update_many(
+        {
+            "$or": [{"archived": {"$exists": False}}, {"archived": False}],
+            "starts_at": {"$lt": cutoff_iso},
+        },
+        {"$set": {"archived": True, "archived_at": now.isoformat()}},
+    )
+    return result.modified_count
+
+
+@api_router.post("/classes/auto-archive")
+async def trigger_auto_archive(user: dict = Depends(require_owner)):
+    n = await _auto_archive_classes()
+    return {"archived": n}
+
+
+@api_router.get("/classes/archived")
+async def list_archived_classes(user: dict = Depends(require_owner)):
+    docs = await db.classes.find(
+        {"archived": True}, {"_id": 0}
+    ).sort("starts_at", -1).to_list(2000)
+    results = []
+    for d in docs:
+        bookings = await db.bookings.find(
+            {"class_id": d["id"], "status": {"$in": ["confirmed", "attended"]}},
+            {"_id": 0, "user_name": 1, "user_email": 1, "status": 1, "id": 1},
+        ).to_list(500)
+        results.append(
+            {
+                "id": d["id"],
+                "title": d["title"],
+                "category": d.get("category"),
+                "kind": d.get("kind"),
+                "starts_at": d["starts_at"],
+                "duration_minutes": d.get("duration_minutes"),
+                "instructor": d.get("instructor", ""),
+                "archived_at": d.get("archived_at"),
+                "attendees": [
+                    {
+                        "id": b["id"],
+                        "name": b.get("user_name", ""),
+                        "email": b.get("user_email", ""),
+                        "status": b.get("status"),
+                    }
+                    for b in bookings
+                ],
+            }
+        )
+    return results
+
+
+@api_router.post("/classes/{class_id}/archive")
+async def archive_class(class_id: str, user: dict = Depends(require_owner)):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    result = await db.classes.update_one(
+        {"id": class_id},
+        {"$set": {"archived": True, "archived_at": now_iso}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Cours introuvable")
+    return {"ok": True}
+
+
+@api_router.post("/classes/{class_id}/restore")
+async def restore_class(class_id: str, user: dict = Depends(require_owner)):
+    result = await db.classes.update_one(
+        {"id": class_id},
+        {"$set": {"archived": False}, "$unset": {"archived_at": ""}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Cours introuvable")
+    return {"ok": True}
 
 
 @api_router.post("/classes", response_model=ClassPublic)
@@ -608,6 +707,8 @@ async def mark_attendance(booking_id: str, user: dict = Depends(require_owner)):
 
     # Try to consume a matching forfait (not expired)
     category = (booking.get("class_snapshot") or {}).get("category")
+    class_title = (booking.get("class_snapshot") or {}).get("title", "")
+    starts_at = (booking.get("class_snapshot") or {}).get("starts_at")
     now_iso = datetime.now(timezone.utc).isoformat()
     match_criteria = {
         "user_id": booking["user_id"],
@@ -622,9 +723,19 @@ async def mark_attendance(booking_id: str, user: dict = Depends(require_owner)):
 
     forfait_info = None
     if matching:
+        history_entry = {
+            "booking_id": booking["id"],
+            "class_title": class_title,
+            "category": category,
+            "starts_at": starts_at,
+            "attended_at": now_iso,
+        }
         await db.forfaits.update_one(
             {"id": matching["id"]},
-            {"$inc": {"remaining_classes": -1}},
+            {
+                "$inc": {"remaining_classes": -1},
+                "$push": {"consumed_bookings": history_entry},
+            },
         )
         forfait_info = {
             "id": matching["id"],
@@ -637,6 +748,87 @@ async def mark_attendance(booking_id: str, user: dict = Depends(require_owner)):
         update["forfait_consumed"] = forfait_info
     await db.bookings.update_one({"id": booking_id}, {"$set": update})
     return {"ok": True, "forfait_consumed": forfait_info}
+
+
+@api_router.post("/bookings/{booking_id}/unattend")
+async def unmark_attendance(booking_id: str, user: dict = Depends(require_owner)):
+    """Revert a mistakenly-marked attendance. Refund the consumed forfait
+    class (if any) and set the booking status back to 'confirmed'."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Réservation introuvable")
+    if booking.get("status") != "attended":
+        raise HTTPException(status_code=400, detail="Cette réservation n'est pas marquée présente")
+
+    forfait_info = booking.get("forfait_consumed")
+    if forfait_info and forfait_info.get("id"):
+        await db.forfaits.update_one(
+            {"id": forfait_info["id"]},
+            {
+                "$inc": {"remaining_classes": 1},
+                "$pull": {"consumed_bookings": {"booking_id": booking_id}},
+            },
+        )
+    await db.bookings.update_one(
+        {"id": booking_id},
+        {"$set": {"status": "confirmed"}, "$unset": {"forfait_consumed": ""}},
+    )
+    return {"ok": True, "refunded": bool(forfait_info)}
+
+
+class OwnerAddBooking(BaseModel):
+    user_id: str
+    mark_present: bool = True
+
+
+@api_router.post("/classes/{class_id}/attendance/add")
+async def owner_add_attendee(class_id: str, payload: OwnerAddBooking, user: dict = Depends(require_owner)):
+    """Add a client to a class attendance list even if they never booked.
+    Useful for walk-in clients the owner wants to record."""
+    cls = await db.classes.find_one({"id": class_id}, {"_id": 0})
+    if not cls:
+        raise HTTPException(status_code=404, detail="Cours introuvable")
+    client = await db.users.find_one({"id": payload.user_id, "role": "client"}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client introuvable")
+
+    # Avoid duplicate active bookings by the same client for this class
+    existing = await db.bookings.find_one(
+        {
+            "class_id": class_id,
+            "user_id": payload.user_id,
+            "status": {"$in": ["confirmed", "pending", "attended"]},
+        }
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Ce client a déjà une réservation pour ce cours")
+
+    booking_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+    booking = {
+        "id": booking_id,
+        "class_id": class_id,
+        "user_id": payload.user_id,
+        "user_name": client["name"],
+        "user_email": client["email"],
+        "status": "confirmed",
+        "created_at": now_iso,
+        "class_snapshot": {
+            "title": cls.get("title"),
+            "category": cls.get("category"),
+            "starts_at": cls.get("starts_at"),
+            "duration_minutes": cls.get("duration_minutes"),
+            "instructor": cls.get("instructor"),
+        },
+    }
+    await db.bookings.insert_one(booking.copy())
+
+    if payload.mark_present:
+        # Reuse the mark_attendance logic to consume forfait if available
+        await mark_attendance(booking_id, user)  # type: ignore
+
+    fresh = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    return fresh
 
 
 @api_router.post("/bookings/{booking_id}/confirm")
@@ -682,9 +874,19 @@ async def _apply_forfaits_to_uncovered(user_id: str) -> int:
         matching = await db.forfaits.find_one(criteria, {"_id": 0}, sort=[("created_at", 1)])
         if not matching:
             continue
+        history_entry = {
+            "booking_id": b["id"],
+            "class_title": (b.get("class_snapshot") or {}).get("title", ""),
+            "category": category,
+            "starts_at": starts_at,
+            "attended_at": now_iso,
+        }
         await db.forfaits.update_one(
             {"id": matching["id"]},
-            {"$inc": {"remaining_classes": -1}},
+            {
+                "$inc": {"remaining_classes": -1},
+                "$push": {"consumed_bookings": history_entry},
+            },
         )
         forfait_info = {
             "id": matching["id"],
@@ -843,7 +1045,10 @@ async def change_own_password(payload: PasswordChange, user: dict = Depends(get_
 
 @api_router.get("/forfaits", response_model=List[ForfaitPublic])
 async def list_forfaits(user: dict = Depends(require_owner)):
-    docs = await db.forfaits.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    docs = await db.forfaits.find(
+        {"$or": [{"archived": {"$exists": False}}, {"archived": False}]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(1000)
     return [ForfaitPublic(**d) for d in docs]
 
 
@@ -909,11 +1114,72 @@ async def update_forfait(forfait_id: str, payload: ForfaitUpdate, user: dict = D
     return ForfaitPublic(**fresh)
 
 
+@api_router.post("/forfaits/{forfait_id}/archive")
+async def archive_forfait(forfait_id: str, user: dict = Depends(require_owner)):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    result = await db.forfaits.update_one(
+        {"id": forfait_id},
+        {"$set": {"archived": True, "active": False, "archived_at": now_iso}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Forfait introuvable")
+    return {"ok": True}
+
+
+@api_router.post("/forfaits/{forfait_id}/restore")
+async def restore_forfait(forfait_id: str, user: dict = Depends(require_owner)):
+    result = await db.forfaits.update_one(
+        {"id": forfait_id},
+        {"$set": {"archived": False, "active": True}, "$unset": {"archived_at": ""}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Forfait introuvable")
+    return {"ok": True}
+
+
+@api_router.get("/forfaits/archived")
+async def list_archived_forfaits(user: dict = Depends(require_owner)):
+    """Archived forfaits grouped by client. Each entry lists the courses
+    that were consumed against that forfait."""
+    docs = await db.forfaits.find({"archived": True}, {"_id": 0}).sort("archived_at", -1).to_list(2000)
+    grouped: dict = {}
+    for d in docs:
+        uid = d["user_id"]
+        if uid not in grouped:
+            grouped[uid] = {
+                "user_id": uid,
+                "user_name": d.get("user_name", ""),
+                "user_email": d.get("user_email", ""),
+                "forfaits": [],
+            }
+        grouped[uid]["forfaits"].append(
+            {
+                "id": d["id"],
+                "name": d.get("name"),
+                "category": d.get("category"),
+                "total_classes": d.get("total_classes"),
+                "remaining_classes": d.get("remaining_classes"),
+                "created_at": d.get("created_at"),
+                "archived_at": d.get("archived_at"),
+                "expires_at": d.get("expires_at"),
+                "consumed_bookings": d.get("consumed_bookings") or [],
+            }
+        )
+    return sorted(grouped.values(), key=lambda x: x["user_name"].lower())
+
+
 @api_router.delete("/forfaits/{forfait_id}")
 async def delete_forfait(forfait_id: str, user: dict = Depends(require_owner)):
-    result = await db.forfaits.delete_one({"id": forfait_id})
-    if result.deleted_count == 0:
+    existing = await db.forfaits.find_one({"id": forfait_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Forfait introuvable")
+    # Un-cover every booking that was consumed by this forfait so those
+    # sessions go back to the "sans forfait" list where the owner can decide.
+    await db.bookings.update_many(
+        {"forfait_consumed.id": forfait_id},
+        {"$unset": {"forfait_consumed": ""}},
+    )
+    await db.forfaits.delete_one({"id": forfait_id})
     return {"ok": True}
 
 

@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { api, Forfait } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
+import { formatFrenchDateTime } from "@/src/utils/date";
 
 const CATEGORIES = [
   { key: "", label: "Tous" },
@@ -71,10 +72,11 @@ function isExpired(iso?: string | null): boolean {
 type Props = {
   onMessage: (m: { text: string; kind: "success" | "error" }) => void;
   initialUserId?: string | null;
+  initialMode?: "create" | "edit";
   onInitialHandled?: () => void;
 };
 
-export default function ForfaitsManager({ onMessage, initialUserId, onInitialHandled }: Props) {
+export default function ForfaitsManager({ onMessage, initialUserId, initialMode, onInitialHandled }: Props) {
   const [forfaits, setForfaits] = useState<Forfait[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string; email: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,15 +110,16 @@ export default function ForfaitsManager({ onMessage, initialUserId, onInitialHan
     const existing = forfaits.find(
       (f) => f.user_id === initialUserId && f.active,
     );
-    if (existing) {
+    if (initialMode === "edit" && existing) {
       openEdit(existing);
     } else {
+      // "create" mode, or no existing forfait → open create form
       setForm({ ...emptyForm, user_id: initialUserId });
       setModalOpen(true);
     }
     onInitialHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialUserId, loading]);
+  }, [initialUserId, initialMode, loading]);
 
   const openCreate = () => {
     setForm({ ...emptyForm });
@@ -186,7 +189,20 @@ export default function ForfaitsManager({ onMessage, initialUserId, onInitialHan
   const remove = async (id: string) => {
     try {
       await api.deleteForfait(id);
-      onMessage({ text: "Forfait supprimé", kind: "success" });
+      onMessage({
+        text: "Forfait supprimé. Les cours qu'il couvrait retournent dans 'Sans forfait'.",
+        kind: "success",
+      });
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
+
+  const archive = async (id: string) => {
+    try {
+      await api.archiveForfait(id);
+      onMessage({ text: "Forfait archivé", kind: "success" });
       await load();
     } catch (e: any) {
       onMessage({ text: e?.message || "Erreur", kind: "error" });
@@ -266,6 +282,15 @@ export default function ForfaitsManager({ onMessage, initialUserId, onInitialHan
                 </TouchableOpacity>
                 <View style={{ width: 1, backgroundColor: colors.border }} />
                 <TouchableOpacity
+                  testID={`archive-forfait-${f.id}`}
+                  onPress={() => archive(f.id)}
+                  style={styles.actionBtn}
+                >
+                  <Ionicons name="archive-outline" size={18} color={colors.textPrimary} />
+                  <Text style={[styles.actionText, { color: colors.textPrimary }]}>Archiver</Text>
+                </TouchableOpacity>
+                <View style={{ width: 1, backgroundColor: colors.border }} />
+                <TouchableOpacity
                   testID={`delete-forfait-${f.id}`}
                   onPress={() => remove(f.id)}
                   style={styles.actionBtn}
@@ -274,6 +299,22 @@ export default function ForfaitsManager({ onMessage, initialUserId, onInitialHan
                   <Text style={[styles.actionText, { color: colors.error }]}>Supprimer</Text>
                 </TouchableOpacity>
               </View>
+              {f.consumed_bookings && f.consumed_bookings.length > 0 && (
+                <View style={styles.consumedList}>
+                  <Text style={styles.consumedTitle}>
+                    Cours utilisés ({f.consumed_bookings.length})
+                  </Text>
+                  {f.consumed_bookings.slice(-8).reverse().map((cb) => (
+                    <View key={cb.booking_id} style={styles.consumedRow}>
+                      <View style={styles.consumedDot} />
+                      <Text style={styles.consumedItemText}>
+                        {formatFrenchDateTime(cb.starts_at)}
+                        {cb.category ? ` · ${CAT_LABELS[cb.category] || cb.category}` : ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           );
         })
@@ -513,6 +554,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   actionText: { fontWeight: "600", fontSize: fontSizes.sm },
+  consumedList: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    gap: 4,
+  },
+  consumedTitle: {
+    fontSize: fontSizes.xs,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  consumedRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  consumedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  consumedItemText: { fontSize: fontSizes.sm, color: colors.textPrimary },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalWrap: { maxHeight: "92%" },
   modal: {

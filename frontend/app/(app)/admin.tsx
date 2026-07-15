@@ -22,6 +22,7 @@ import ForfaitsManager from "@/src/components/ForfaitsManager";
 import ClientsManager from "@/src/components/ClientsManager";
 import UncoveredBookings from "@/src/components/UncoveredBookings";
 import AppearanceManager from "@/src/components/AppearanceManager";
+import ArchivesPanel from "@/src/components/ArchivesPanel";
 import NativePicker from "@/src/components/NativePicker";
 import { formatFrenchDateTime } from "@/src/utils/date";
 
@@ -133,8 +134,9 @@ export default function Admin() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [tab, setTab] = useState<"classes" | "forfaits" | "uncovered" | "clients" | "appearance" | "settings">("classes");
+  const [tab, setTab] = useState<"classes" | "forfaits" | "uncovered" | "clients" | "appearance" | "archives" | "settings">("classes");
   const [pendingForfaitClientId, setPendingForfaitClientId] = useState<string | null>(null);
+  const [pendingForfaitMode, setPendingForfaitMode] = useState<"create" | "edit">("edit");
   const [uncoveredRefreshKey, setUncoveredRefreshKey] = useState(0);
   const [message, setMessage] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -273,6 +275,17 @@ export default function Admin() {
     }
   };
 
+  const archiveCls = async (id: string) => {
+    setMessage(null);
+    try {
+      await api.archiveClass(id);
+      setMessage({ text: "Cours archivé", kind: "success" });
+      await load();
+    } catch (e: any) {
+      setMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
+
   const updateSettingsField = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
     const next = { ...settings, ...patch };
@@ -338,6 +351,13 @@ export default function Admin() {
           style={[styles.tab, tab === "appearance" && styles.tabActive]}
         >
           <Text style={[styles.tabText, tab === "appearance" && styles.tabTextActive]}>Apparence</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID="admin-tab-archives"
+          onPress={() => setTab("archives")}
+          style={[styles.tab, tab === "archives" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "archives" && styles.tabTextActive]}>Archives</Text>
         </TouchableOpacity>
         <TouchableOpacity
           testID="admin-tab-settings"
@@ -410,6 +430,15 @@ export default function Admin() {
                   </TouchableOpacity>
                   <View style={{ width: 1, backgroundColor: colors.border }} />
                   <TouchableOpacity
+                    testID={`archive-class-${cls.id}`}
+                    onPress={() => archiveCls(cls.id)}
+                    style={styles.actionBtn}
+                  >
+                    <Ionicons name="archive-outline" size={18} color={colors.textPrimary} />
+                    <Text style={[styles.actionText, { color: colors.textPrimary }]}>Archiver</Text>
+                  </TouchableOpacity>
+                  <View style={{ width: 1, backgroundColor: colors.border }} />
+                  <TouchableOpacity
                     testID={`delete-class-${cls.id}`}
                     onPress={() => remove(cls.id)}
                     style={styles.actionBtn}
@@ -431,6 +460,7 @@ export default function Admin() {
               if (m.kind === "success") setUncoveredRefreshKey((k) => k + 1);
             }}
             initialUserId={pendingForfaitClientId}
+            initialMode={pendingForfaitMode}
             onInitialHandled={() => setPendingForfaitClientId(null)}
           />
         </ScrollView>
@@ -439,8 +469,9 @@ export default function Admin() {
           <UncoveredBookings
             onMessage={setMessage}
             refreshKey={uncoveredRefreshKey}
-            onGoToForfait={(uid) => {
-              setPendingForfaitClientId(uid);
+            onGoToForfait={({ userId, mode }) => {
+              setPendingForfaitClientId(userId);
+              setPendingForfaitMode(mode);
               setTab("forfaits");
             }}
           />
@@ -452,6 +483,10 @@ export default function Admin() {
       ) : tab === "appearance" ? (
         <ScrollView contentContainerStyle={styles.list}>
           <AppearanceManager onMessage={setMessage} />
+        </ScrollView>
+      ) : tab === "archives" ? (
+        <ScrollView contentContainerStyle={styles.list}>
+          <ArchivesPanel onMessage={setMessage} />
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
@@ -882,6 +917,9 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
   const [open, setOpen] = useState(false);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
+  const [clients, setClients] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [walkInSearch, setWalkInSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -896,6 +934,34 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
   useEffect(() => {
     if (open) load();
   }, [open, load]);
+
+  const openWalkIn = async () => {
+    try {
+      const list = await api.listClients();
+      setClients(list);
+      setWalkInSearch("");
+      setWalkInOpen(true);
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
+
+  const addWalkIn = async (userId: string, markPresent: boolean) => {
+    try {
+      await api.addAttendee(classId, userId, markPresent);
+      onMessage({
+        text: markPresent
+          ? "Client ajouté et marqué présent"
+          : "Client ajouté à la liste",
+        kind: "success",
+      });
+      setWalkInOpen(false);
+      await load();
+      onChange();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
 
   const attend = async (id: string) => {
     try {
@@ -914,8 +980,33 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
       onMessage({ text: e?.message || "Erreur", kind: "error" });
     }
   };
+  const unattend = async (id: string) => {
+    try {
+      const res = await api.unattend(id);
+      onMessage({
+        text: res.refunded
+          ? "Présence annulée et forfait recrédité"
+          : "Présence annulée",
+        kind: "success",
+      });
+      await load();
+      onChange();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
   const confirm = async (id: string) => { await api.confirm(id); await load(); onChange(); };
   const cancel = async (id: string) => { await api.cancelBooking(id); await load(); onChange(); };
+
+  const alreadyBookedIds = new Set(
+    bookings.filter((b) => b.status !== "cancelled").map((b) => b.user_id),
+  );
+  const filteredClients = clients.filter((c) => {
+    if (alreadyBookedIds.has(c.id)) return false;
+    const q = walkInSearch.trim().toLowerCase();
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+  });
 
   return (
     <View style={{ marginTop: spacing.md }}>
@@ -931,10 +1022,18 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
       </TouchableOpacity>
       {open && (
         <View style={{ marginTop: spacing.sm }}>
+          <TouchableOpacity
+            testID={`add-walkin-${classId}`}
+            onPress={openWalkIn}
+            style={styles.addWalkInBtn}
+          >
+            <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+            <Text style={styles.addWalkInText}>Ajouter un client</Text>
+          </TouchableOpacity>
           {loading ? (
             <ActivityIndicator color={colors.primary} />
           ) : bookings.length === 0 ? (
-            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm }}>
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, marginTop: spacing.sm }}>
               Aucun inscrit
             </Text>
           ) : (
@@ -964,6 +1063,18 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
                     <Text style={styles.smallBtnText}>Présent</Text>
                   </TouchableOpacity>
                 )}
+                {b.status === "attended" && (
+                  <TouchableOpacity
+                    testID={`unattend-${b.id}`}
+                    onPress={() => unattend(b.id)}
+                    style={[
+                      styles.smallBtn,
+                      { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.warning },
+                    ]}
+                  >
+                    <Text style={[styles.smallBtnText, { color: colors.warning }]}>Modifier</Text>
+                  </TouchableOpacity>
+                )}
                 {b.status !== "cancelled" && b.status !== "attended" && (
                   <TouchableOpacity
                     testID={`cancel-attendee-${b.id}`}
@@ -981,6 +1092,55 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
           )}
         </View>
       )}
+
+      <Modal
+        visible={walkInOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWalkInOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: "80%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ajouter un client au cours</Text>
+              <TouchableOpacity testID="close-walkin" onPress={() => setWalkInOpen(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+                <TextInput
+              testID="walkin-search"
+              value={walkInSearch}
+              onChangeText={setWalkInSearch}
+              placeholder="Rechercher un client…"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+            />
+            <ScrollView style={{ marginTop: spacing.sm, maxHeight: 340 }}>
+              {filteredClients.length === 0 ? (
+                <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, padding: spacing.md }}>
+                  Aucun client disponible
+                </Text>
+              ) : (
+                filteredClients.map((c) => (
+                  <View key={c.id} style={styles.walkInRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.attendeeName}>{c.name}</Text>
+                      <Text style={styles.attendeeMeta}>{c.email}</Text>
+                    </View>
+                    <TouchableOpacity
+                      testID={`walkin-present-${c.id}`}
+                      onPress={() => addWalkIn(c.id, true)}
+                      style={[styles.smallBtn, { backgroundColor: colors.primary }]}
+                    >
+                      <Text style={styles.smallBtnText}>+ Présent</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1191,4 +1351,26 @@ const styles = StyleSheet.create({
   attendeeMeta: { color: colors.textSecondary, fontSize: fontSizes.xs, marginTop: 2 },
   smallBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
   smallBtnText: { color: "#fff", fontSize: fontSizes.xs, fontWeight: "600" },
+  addWalkInBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceElevated,
+  },
+  addWalkInText: { color: colors.primary, fontSize: fontSizes.sm, fontWeight: "600" },
+  walkInRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
 });
