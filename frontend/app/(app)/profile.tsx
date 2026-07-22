@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -13,6 +13,12 @@ export default function Profile() {
   const doLogout = async () => {
     await signOut();
     router.replace("/(auth)/login");
+  };
+
+  const reloadApp = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.reload();
+    }
   };
 
   return (
@@ -30,6 +36,11 @@ export default function Profile() {
             </Text>
           </View>
         </View>
+
+        <TouchableOpacity testID="reload-app" onPress={reloadApp} style={styles.reloadBtn}>
+          <Ionicons name="refresh-outline" size={20} color={colors.primary} />
+          <Text style={styles.reloadText}>Actualiser l&apos;application</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity testID="logout-button" onPress={doLogout} style={styles.logoutBtn}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
@@ -95,4 +106,16 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   logoutText: { color: colors.error, fontWeight: "600", fontSize: fontSizes.md },
+  reloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: spacing.md,
+  },
+  reloadText: { color: colors.primary, fontWeight: "600", fontSize: fontSizes.md },
 });

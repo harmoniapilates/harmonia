@@ -35,6 +35,7 @@ const COLOR_FIELDS: { key: keyof AppSettings["colors"]; label: string; hint?: st
 
 const IMAGE_FIELDS: { key: keyof AppSettings["images"]; label: string; hint?: string }[] = [
   { key: "loginHero", label: "Image d'accueil (login)", hint: "Grande image sur la page de connexion" },
+  { key: "logoUrl", label: "Logo de l'entreprise", hint: "URL PNG carré (utilisé dans l'app)" },
   { key: "yoga", label: "Image par défaut Yoga" },
   { key: "pilates", label: "Image par défaut Pilates" },
   { key: "massage", label: "Image par défaut Massage" },

@@ -99,6 +99,35 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
     }
   };
 
+  const confirmAsync = (message: string): boolean => {
+    if (typeof window !== "undefined" && window.confirm) return window.confirm(message);
+    return true;
+  };
+
+  const deleteClass = async (id: string) => {
+    if (!confirmAsync("Supprimer définitivement ce cours archivé ? Cette action est irréversible.")) return;
+    try {
+      await api.deleteClass(id);
+      onMessage({ text: "Cours supprimé définitivement", kind: "success" });
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
+
+  const deleteForfait = async (id: string) => {
+    if (!confirmAsync(
+      "Supprimer définitivement ce forfait archivé ? L'historique des cours utilisés sera perdu.",
+    )) return;
+    try {
+      await api.deleteForfait(id);
+      onMessage({ text: "Forfait supprimé définitivement", kind: "success" });
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
+
   return (
     <View>
       <View style={styles.tabsRow}>
@@ -134,6 +163,19 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
           classes.map((c) => {
             const open = expandedClass[c.id];
             const attendedList = c.attendees.filter((a) => a.status === "attended");
+            const notAttended = c.attendees.filter(
+              (a) => a.status === "confirmed" || a.status === "pending",
+            );
+            const statusLabel = (s: string) =>
+              s === "attended"
+                ? "présent"
+                : s === "confirmed"
+                ? "réservé (absent)"
+                : s === "pending"
+                ? "en attente"
+                : s === "cancelled"
+                ? "annulée"
+                : s;
             return (
               <View key={c.id} style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -141,7 +183,8 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
                     <Text style={styles.title}>{c.title}</Text>
                     <Text style={styles.meta}>{formatFrenchDateTime(c.starts_at)}</Text>
                     <Text style={styles.meta}>
-                      {c.category} · {c.attendees.length} inscrit(s) · {attendedList.length} présent(s)
+                      {c.category} · {attendedList.length} présent(s)
+                      {notAttended.length > 0 ? ` · ${notAttended.length} absent(s)` : ""}
                     </Text>
                   </View>
                 </View>
@@ -157,46 +200,64 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
                     color={colors.textSecondary}
                   />
                   <Text style={styles.expandText}>
-                    {open ? "Masquer les participants" : "Voir les participants"}
+                    {open ? "Masquer les participants" : `Voir les ${c.attendees.length} inscrit(s)`}
                   </Text>
                 </TouchableOpacity>
 
                 {open && (
                   <View style={styles.attendeeList}>
-                    {c.attendees.map((a) => (
-                      <View key={a.id} style={styles.attendeeItem}>
-                        <View
-                          style={[
-                            styles.statusDot,
-                            {
-                              backgroundColor:
-                                a.status === "attended"
-                                  ? colors.success
-                                  : a.status === "confirmed"
-                                  ? colors.primary
-                                  : colors.textSecondary,
-                            },
-                          ]}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.attName}>{a.name}</Text>
-                          <Text style={styles.attMeta}>
-                            {a.email} · {a.status === "attended" ? "présent" : a.status}
-                          </Text>
+                    {c.attendees.length === 0 ? (
+                      <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, padding: 8 }}>
+                        Aucune réservation
+                      </Text>
+                    ) : (
+                      c.attendees.map((a) => (
+                        <View key={a.id} style={styles.attendeeItem}>
+                          <View
+                            style={[
+                              styles.statusDot,
+                              {
+                                backgroundColor:
+                                  a.status === "attended"
+                                    ? colors.success
+                                    : a.status === "confirmed"
+                                    ? colors.warning
+                                    : a.status === "pending"
+                                    ? colors.textSecondary
+                                    : colors.error,
+                              },
+                            ]}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.attName}>{a.name}</Text>
+                            <Text style={styles.attMeta}>
+                              {a.email} · {statusLabel(a.status)}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                    ))}
+                      ))
+                    )}
                   </View>
                 )}
 
-                <TouchableOpacity
-                  testID={`restore-class-${c.id}`}
-                  onPress={() => restoreClass(c.id)}
-                  style={styles.restoreBtn}
-                >
-                  <Ionicons name="refresh-outline" size={16} color={colors.primary} />
-                  <Text style={styles.restoreText}>Restaurer</Text>
-                </TouchableOpacity>
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    testID={`restore-class-${c.id}`}
+                    onPress={() => restoreClass(c.id)}
+                    style={styles.restoreBtn}
+                  >
+                    <Ionicons name="refresh-outline" size={16} color={colors.primary} />
+                    <Text style={styles.restoreText}>Restaurer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    testID={`delete-archived-class-${c.id}`}
+                    onPress={() => deleteClass(c.id)}
+                    style={styles.deleteBtn}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.error} />
+                    <Text style={styles.deleteText}>Supprimer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })
@@ -249,14 +310,23 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
                               Archivé le {formatFrenchDateTime(f.archived_at)}
                             </Text>
                           </View>
-                          <TouchableOpacity
-                            testID={`restore-forfait-${f.id}`}
-                            onPress={() => restoreForfait(f.id)}
-                            style={styles.restorePill}
-                          >
-                            <Ionicons name="refresh-outline" size={14} color={colors.primary} />
-                            <Text style={styles.restorePillText}>Restaurer</Text>
-                          </TouchableOpacity>
+                          <View style={styles.pillActions}>
+                            <TouchableOpacity
+                              testID={`restore-forfait-${f.id}`}
+                              onPress={() => restoreForfait(f.id)}
+                              style={styles.restorePill}
+                            >
+                              <Ionicons name="refresh-outline" size={14} color={colors.primary} />
+                              <Text style={styles.restorePillText}>Restaurer</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              testID={`delete-archived-forfait-${f.id}`}
+                              onPress={() => deleteForfait(f.id)}
+                              style={styles.deletePill}
+                            >
+                              <Ionicons name="trash-outline" size={14} color={colors.error} />
+                            </TouchableOpacity>
+                          </View>
                         </View>
 
                         {f.consumed_bookings.length > 0 && (
@@ -374,7 +444,8 @@ const styles = StyleSheet.create({
   attName: { color: colors.textPrimary, fontSize: fontSizes.sm, fontWeight: "500" },
   attMeta: { color: colors.textSecondary, fontSize: fontSizes.xs, marginTop: 1 },
   restoreBtn: {
-    marginTop: spacing.md,
+    flex: 1,
+    marginTop: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -385,6 +456,33 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   restoreText: { color: colors.primary, fontWeight: "600", fontSize: fontSizes.sm },
+  actionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: spacing.md,
+  },
+  deleteBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  deleteText: { color: colors.error, fontWeight: "600", fontSize: fontSizes.sm },
+  pillActions: { flexDirection: "row", gap: 6, alignItems: "center" },
+  deletePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   restorePill: {
     flexDirection: "row",
     alignItems: "center",

@@ -162,10 +162,30 @@ export default function Calendar() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <View>
+        {images.logoUrl ? (
+          <Image
+            source={{ uri: images.logoUrl }}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
+        ) : null}
+        <View style={{ flex: 1 }}>
           <Text style={styles.overline}>{texts.calendarWelcomePrefix} {user?.name?.toUpperCase() || ""}</Text>
           <Text style={styles.title}>{texts.calendarTitle}</Text>
         </View>
+        <TouchableOpacity
+          testID="refresh-calendar"
+          onPress={load}
+          disabled={loading}
+          style={styles.refreshBtn}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={20}
+            color={colors.primary}
+            style={loading ? { opacity: 0.4 } : undefined}
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.chipsRow}>
@@ -390,6 +410,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  refreshBtn: {
+    padding: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    marginLeft: 8,
+  },
+  logoImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 10,
+    backgroundColor: colors.surface,
   },
   viewToggle: {
     flexDirection: "row",

@@ -131,6 +131,7 @@ class BrandingImages(BaseModel):
     yoga: str = "https://images.pexels.com/photos/6787357/pexels-photo-6787357.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
     pilates: str = "https://images.pexels.com/photos/4325466/pexels-photo-4325466.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
     massage: str = "https://images.pexels.com/photos/3757942/pexels-photo-3757942.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    logoUrl: str = ""
     faviconUrl: str = ""
     appIconUrl: str = ""
 
@@ -453,10 +454,16 @@ async def list_archived_classes(user: dict = Depends(require_owner)):
     ).sort("starts_at", -1).to_list(2000)
     results = []
     for d in docs:
+        # Include EVERY booking (confirmed, pending, attended, even cancelled)
+        # so the owner can see who had booked the course — including clients
+        # who reserved but were never marked present.
         bookings = await db.bookings.find(
-            {"class_id": d["id"], "status": {"$in": ["confirmed", "attended"]}},
+            {"class_id": d["id"]},
             {"_id": 0, "user_name": 1, "user_email": 1, "status": 1, "id": 1},
         ).to_list(500)
+        # Sort so attended first, then confirmed/pending, then cancelled
+        order = {"attended": 0, "confirmed": 1, "pending": 2, "cancelled": 3}
+        bookings.sort(key=lambda b: order.get(b.get("status"), 9))
         results.append(
             {
                 "id": d["id"],
@@ -841,17 +848,18 @@ async def confirm_booking(booking_id: str, user: dict = Depends(require_owner)):
 
 
 async def _apply_forfaits_to_uncovered(user_id: str) -> int:
-    """Try to consume active forfaits for a user's uncovered bookings.
+    """Try to consume active forfaits for a user's ATTENDED-but-uncovered bookings.
 
-    "Uncovered" = past bookings (starts_at < now) that are attended or
-    confirmed but have no forfait_consumed. Older bookings are covered first.
+    Only bookings whose owner already marked "attended" are considered — a
+    freshly booked (confirmed) session must not appear in "sans forfait" until
+    the client is actually recorded present.
     Returns the number of bookings that were newly covered.
     """
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     query = {
         "user_id": user_id,
-        "status": {"$in": ["confirmed", "attended"]},
+        "status": "attended",
         "$or": [{"forfait_consumed": None}, {"forfait_consumed": {"$exists": False}}],
     }
     bookings = await db.bookings.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
@@ -905,13 +913,13 @@ async def _apply_forfaits_to_uncovered(user_id: str) -> int:
 
 @api_router.get("/bookings/uncovered")
 async def list_uncovered_bookings(user: dict = Depends(require_owner)):
-    """Return past bookings that were never charged against a forfait,
-    grouped by client. Only bookings whose class already started are listed."""
-    now_iso = datetime.now(timezone.utc).isoformat()
+    """Return bookings that were marked present but never charged against a
+    forfait, grouped by client. A booking must be status='attended' — a
+    freshly-made reservation that hasn't been confirmed present yet must NOT
+    appear here."""
     query = {
-        "status": {"$in": ["confirmed", "attended"]},
+        "status": "attended",
         "$or": [{"forfait_consumed": None}, {"forfait_consumed": {"$exists": False}}],
-        "class_snapshot.starts_at": {"$lt": now_iso},
     }
     docs = await db.bookings.find(query, {"_id": 0}).sort("class_snapshot.starts_at", -1).to_list(2000)
     grouped: dict = {}
@@ -1173,12 +1181,15 @@ async def delete_forfait(forfait_id: str, user: dict = Depends(require_owner)):
     existing = await db.forfaits.find_one({"id": forfait_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Forfait introuvable")
-    # Un-cover every booking that was consumed by this forfait so those
-    # sessions go back to the "sans forfait" list where the owner can decide.
-    await db.bookings.update_many(
-        {"forfait_consumed.id": forfait_id},
-        {"$unset": {"forfait_consumed": ""}},
-    )
+    # If the forfait is currently active (not archived), un-cover every booking
+    # it charged so those sessions go back to "sans forfait" for the owner to
+    # handle. If the forfait is already archived, this is a permanent
+    # historical delete and we leave the past attendance records untouched.
+    if not existing.get("archived"):
+        await db.bookings.update_many(
+            {"forfait_consumed.id": forfait_id},
+            {"$unset": {"forfait_consumed": ""}},
+        )
     await db.forfaits.delete_one({"id": forfait_id})
     return {"ok": True}
 

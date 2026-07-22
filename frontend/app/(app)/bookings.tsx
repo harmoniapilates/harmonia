@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 
 import { api, Booking, Forfait } from "@/src/api/client";
 import { colors, spacing, radius, fontSizes } from "@/src/theme";
@@ -73,6 +74,12 @@ export default function Bookings() {
     load();
   }, [load]);
 
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
   const now = Date.now();
   const filtered = bookings.filter((b) => {
     const t = b.class_snapshot?.starts_at ? new Date(b.class_snapshot.starts_at).getTime() : 0;
@@ -95,6 +102,19 @@ export default function Bookings() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Mes Réservations</Text>
+        <TouchableOpacity
+          testID="refresh-bookings"
+          onPress={load}
+          disabled={loading}
+          style={styles.refreshBtn}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={20}
+            color={colors.primary}
+            style={loading ? { opacity: 0.4 } : undefined}
+          />
+        </TouchableOpacity>
       </View>
 
       {user?.role === "client" && forfaits.length > 0 && (
@@ -245,8 +265,21 @@ export default function Bookings() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: { padding: spacing.lg, paddingBottom: spacing.sm },
+  header: {
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   title: { fontSize: fontSizes.xxl, color: colors.textPrimary, fontWeight: "500" },
+  refreshBtn: {
+    padding: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+  },
   forfaitsSection: { marginBottom: spacing.md },
   sectionOverline: {
     fontSize: fontSizes.xs,

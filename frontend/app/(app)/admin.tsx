@@ -302,18 +302,30 @@ export default function Admin() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Gestion</Text>
-        {tab === "classes" && (
-          <View style={styles.headerActions}>
-            <TouchableOpacity testID="bulk-create-btn" onPress={openBulk} style={styles.bulkBtn}>
-              <Ionicons name="albums-outline" size={18} color={colors.primary} />
-              <Text style={styles.bulkBtnText}>Série</Text>
-            </TouchableOpacity>
-            <TouchableOpacity testID="add-class-btn" onPress={openCreate} style={styles.addBtn}>
-              <Ionicons name="add" size={22} color="#fff" />
-              <Text style={styles.addBtnText}>Ajouter</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            testID="refresh-admin"
+            onPress={() => {
+              load();
+              setUncoveredRefreshKey((k) => k + 1);
+            }}
+            style={styles.refreshBtn}
+          >
+            <Ionicons name="refresh-outline" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          {tab === "classes" && (
+            <>
+              <TouchableOpacity testID="bulk-create-btn" onPress={openBulk} style={styles.bulkBtn}>
+                <Ionicons name="albums-outline" size={18} color={colors.primary} />
+                <Text style={styles.bulkBtnText}>Série</Text>
+              </TouchableOpacity>
+              <TouchableOpacity testID="add-class-btn" onPress={openCreate} style={styles.addBtn}>
+                <Ionicons name="add" size={22} color="#fff" />
+                <Text style={styles.addBtnText}>Ajouter</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
 
       <View style={styles.tabs}>

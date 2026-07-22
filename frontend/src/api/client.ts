@@ -186,6 +186,7 @@ export type BrandingImages = {
   yoga: string;
   pilates: string;
   massage: string;
+  logoUrl: string;
   faviconUrl: string;
   appIconUrl: string;
 };
