@@ -423,7 +423,48 @@ async def list_classes(user: dict = Depends(get_current_user)):
         {"$or": [{"archived": {"$exists": False}}, {"archived": False}]},
         {"_id": 0},
     ).sort("starts_at", 1).to_list(500)
-    return [await build_class_public(d) for d in docs]
+
+    # Count bookings for ALL classes in a single aggregation query instead of
+    # one count_documents() call per class (which was an N+1 query problem:
+    # 40 classes on the calendar meant 40 extra round-trips to MongoDB every
+    # time the calendar screen loaded).
+    booked_counts = await _booked_counts_by_class([d["id"] for d in docs])
+    return [build_class_public_with_count(d, booked_counts.get(d["id"], 0)) for d in docs]
+
+
+async def _booked_counts_by_class(class_ids: List[str]) -> dict:
+    """Return {class_id: booked_count} for many classes in one query."""
+    if not class_ids:
+        return {}
+    pipeline = [
+        {"$match": {
+            "class_id": {"$in": class_ids},
+            "status": {"$in": ["confirmed", "pending", "attended"]},
+        }},
+        {"$group": {"_id": "$class_id", "count": {"$sum": 1}}},
+    ]
+    counts = {}
+    async for row in db.bookings.aggregate(pipeline):
+        counts[row["_id"]] = row["count"]
+    return counts
+
+
+def build_class_public_with_count(cls: dict, booked: int) -> ClassPublic:
+    """Same shape as build_class_public(), but takes a precomputed booked
+    count instead of querying the database itself."""
+    return ClassPublic(
+        id=cls["id"],
+        title=cls["title"],
+        description=cls.get("description", ""),
+        category=cls["category"],
+        kind=cls["kind"],
+        starts_at=cls["starts_at"],
+        duration_minutes=cls.get("duration_minutes", 60),
+        capacity=cls.get("capacity", 10),
+        instructor=cls.get("instructor", ""),
+        image=cls.get("image", ""),
+        booked_count=booked,
+    )
 
 
 async def _auto_archive_classes() -> int:
@@ -1206,6 +1247,29 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def create_indexes():
+    """Create MongoDB indexes so the queries the app runs on every calendar
+    load, login, and booking don't require a full collection scan. Without
+    these, performance degrades as more classes/bookings accumulate over time.
+    """
+    try:
+        await db.classes.create_index("starts_at")
+        await db.classes.create_index("archived")
+        await db.classes.create_index([("archived", 1), ("starts_at", 1)])
+
+        await db.bookings.create_index("class_id")
+        await db.bookings.create_index("user_id")
+        await db.bookings.create_index("status")
+        await db.bookings.create_index([("class_id", 1), ("status", 1)])
+        await db.bookings.create_index([("user_id", 1), ("status", 1)])
+        await db.bookings.create_index("created_at")
+
+        logger.info("MongoDB indexes ensured.")
+    except Exception as e:
+        logger.warning(f"Index creation skipped/failed: {e}")
 
 
 @app.on_event("shutdown")
