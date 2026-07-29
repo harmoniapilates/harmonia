@@ -995,6 +995,38 @@ async def root():
 
 
 # ============ Forfait Routes ============
+class ClientCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+
+@api_router.post("/users/clients")
+async def create_client(payload: ClientCreate, user: dict = Depends(require_owner)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Le nom ne peut pas être vide")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
+
+    email = payload.email.lower()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email déjà enregistrée")
+
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "name": name,
+        "hashed_password": hash_password(payload.password),
+        "role": "client",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "name": name, "email": email, "role": "client"}
+
+
 @api_router.get("/users/clients")
 async def list_clients(user: dict = Depends(require_owner)):
     docs = await db.users.find(
