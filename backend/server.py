@@ -879,6 +879,67 @@ async def owner_add_attendee(class_id: str, payload: OwnerAddBooking, user: dict
     return fresh
 
 
+class BookingMove(BaseModel):
+    new_class_id: str
+
+
+@api_router.post("/bookings/{booking_id}/move")
+async def move_booking(booking_id: str, payload: BookingMove, user: dict = Depends(require_owner)):
+    """Move a client's booking from one class to another.
+    Not allowed once attendance has already been marked; unattend first."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Réservation introuvable")
+    if booking["status"] == "cancelled":
+        raise HTTPException(status_code=400, detail="Cette réservation est annulée")
+    if booking["status"] == "attended":
+        raise HTTPException(
+            status_code=400,
+            detail="Impossible de déplacer une présence déjà enregistrée. Annulez d'abord la présence.",
+        )
+    if payload.new_class_id == booking["class_id"]:
+        raise HTTPException(status_code=400, detail="Le client est déjà inscrit à ce cours")
+
+    new_cls = await db.classes.find_one({"id": payload.new_class_id}, {"_id": 0})
+    if not new_cls:
+        raise HTTPException(status_code=404, detail="Cours de destination introuvable")
+
+    existing = await db.bookings.find_one(
+        {
+            "class_id": payload.new_class_id,
+            "user_id": booking["user_id"],
+            "status": {"$in": ["confirmed", "pending", "attended"]},
+        }
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Ce client a déjà une réservation pour ce cours")
+
+    booked = await db.bookings.count_documents(
+        {"class_id": payload.new_class_id, "status": {"$in": ["confirmed", "pending", "attended"]}}
+    )
+    if booked >= new_cls["capacity"]:
+        raise HTTPException(status_code=400, detail="Cours de destination complet")
+
+    await db.bookings.update_one(
+        {"id": booking_id},
+        {
+            "$set": {
+                "class_id": payload.new_class_id,
+                "class_snapshot": {
+                    "title": new_cls["title"],
+                    "category": new_cls["category"],
+                    "kind": new_cls["kind"],
+                    "starts_at": new_cls["starts_at"],
+                    "duration_minutes": new_cls.get("duration_minutes", 60),
+                    "instructor": new_cls.get("instructor", ""),
+                },
+            }
+        },
+    )
+    fresh = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    return fresh
+
+
 @api_router.post("/bookings/{booking_id}/confirm")
 async def confirm_booking(booking_id: str, user: dict = Depends(require_owner)):
     booking = await db.bookings.find_one({"id": booking_id})
