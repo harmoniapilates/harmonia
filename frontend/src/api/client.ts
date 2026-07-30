@@ -83,6 +83,11 @@ export const api = {
       method: "POST",
       body: { user_id: userId, mark_present: markPresent },
     }),
+  moveBooking: (bookingId: string, newClassId: string) =>
+    request<Booking>(`/bookings/${bookingId}/move`, {
+      method: "POST",
+      body: { new_class_id: newClassId },
+    }),
   archiveClass: (classId: string) =>
     request<{ ok: boolean }>(`/classes/${classId}/archive`, { method: "POST" }),
   restoreClass: (classId: string) =>
