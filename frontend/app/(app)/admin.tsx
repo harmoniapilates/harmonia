@@ -459,7 +459,7 @@ export default function Admin() {
                     <Text style={[styles.actionText, { color: colors.error }]}>Supprimer</Text>
                   </TouchableOpacity>
                 </View>
-                <AttendeesInline classId={cls.id} onChange={load} onMessage={setMessage} />
+                <AttendeesInline classId={cls.id} allClasses={classes} onChange={load} onMessage={setMessage} />
               </View>
             ))
           )}
@@ -925,13 +925,14 @@ const STATUS_FR: Record<string, string> = {
   attended: "présent",
 };
 
-function AttendeesInline({ classId, onChange, onMessage }: { classId: string; onChange: () => void; onMessage: (m: { text: string; kind: "success" | "error" }) => void }) {
+function AttendeesInline({ classId, allClasses, onChange, onMessage }: { classId: string; allClasses: ClassItem[]; onChange: () => void; onMessage: (m: { text: string; kind: "success" | "error" }) => void }) {
   const [open, setOpen] = useState(false);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [clients, setClients] = useState<{ id: string; name: string; email: string }[]>([]);
   const [walkInSearch, setWalkInSearch] = useState("");
+  const [moveTarget, setMoveTarget] = useState<{ bookingId: string; userName: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1009,6 +1010,18 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
   };
   const confirm = async (id: string) => { await api.confirm(id); await load(); onChange(); };
   const cancel = async (id: string) => { await api.cancelBooking(id); await load(); onChange(); };
+  const moveClient = async (newClassId: string) => {
+    if (!moveTarget) return;
+    try {
+      await api.moveBooking(moveTarget.bookingId, newClassId);
+      onMessage({ text: `${moveTarget.userName} déplacé(e) vers le nouveau cours`, kind: "success" });
+      setMoveTarget(null);
+      await load();
+      onChange();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur", kind: "error" });
+    }
+  };
 
   const alreadyBookedIds = new Set(
     bookings.filter((b) => b.status !== "cancelled").map((b) => b.user_id),
@@ -1087,6 +1100,18 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
                     <Text style={[styles.smallBtnText, { color: colors.warning }]}>Modifier</Text>
                   </TouchableOpacity>
                 )}
+                {(b.status === "confirmed" || b.status === "pending") && (
+                  <TouchableOpacity
+                    testID={`move-${b.id}`}
+                    onPress={() => setMoveTarget({ bookingId: b.id, userName: b.user_name })}
+                    style={[
+                      styles.smallBtn,
+                      { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.textSecondary },
+                    ]}
+                  >
+                    <Text style={[styles.smallBtnText, { color: colors.textSecondary }]}>Déplacer</Text>
+                  </TouchableOpacity>
+                )}
                 {b.status !== "cancelled" && b.status !== "attended" && (
                   <TouchableOpacity
                     testID={`cancel-attendee-${b.id}`}
@@ -1140,6 +1165,13 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
                       <Text style={styles.attendeeMeta}>{c.email}</Text>
                     </View>
                     <TouchableOpacity
+                      testID={`walkin-book-${c.id}`}
+                      onPress={() => addWalkIn(c.id, false)}
+                      style={[styles.smallBtn, { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.primary, marginRight: 6 }]}
+                    >
+                      <Text style={[styles.smallBtnText, { color: colors.primary }]}>+ Inscrire</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       testID={`walkin-present-${c.id}`}
                       onPress={() => addWalkIn(c.id, true)}
                       style={[styles.smallBtn, { backgroundColor: colors.primary }]}
@@ -1148,6 +1180,52 @@ function AttendeesInline({ classId, onChange, onMessage }: { classId: string; on
                     </TouchableOpacity>
                   </View>
                 ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!moveTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMoveTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: "80%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Déplacer {moveTarget?.userName} vers…
+              </Text>
+              <TouchableOpacity testID="close-move" onPress={() => setMoveTarget(null)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ marginTop: spacing.sm, maxHeight: 340 }}>
+              {allClasses.filter((c) => c.id !== classId).length === 0 ? (
+                <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, padding: spacing.md }}>
+                  Aucun autre cours disponible
+                </Text>
+              ) : (
+                allClasses
+                  .filter((c) => c.id !== classId)
+                  .map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      testID={`move-target-${c.id}`}
+                      onPress={() => moveClient(c.id)}
+                      style={styles.walkInRow}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.attendeeName}>{c.title}</Text>
+                        <Text style={styles.attendeeMeta}>
+                          {fmtDateTime(c.starts_at)} · {c.booked_count}/{c.capacity} inscrits
+                        </Text>
+                      </View>
+                      <Ionicons name="arrow-forward-circle-outline" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                  ))
               )}
             </ScrollView>
           </View>
