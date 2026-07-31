@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "@/src/context/auth";
-import { colors, spacing, radius, fontSizes, images, business, texts } from "@/src/theme";
+import { colors, spacing, radius, fontSizes, images, texts } from "@/src/theme";
 
 export default function Login() {
   const router = useRouter();
@@ -56,13 +56,7 @@ export default function Login() {
             source={{ uri: images.loginHero }}
             style={styles.hero}
             imageStyle={{ borderRadius: radius.xl }}
-          >
-            <View style={styles.heroOverlay}>
-              <Text style={styles.overline}>{texts.loginHeroOverline}</Text>
-              <Text style={styles.heroTitle}>{business.name}</Text>
-              <Text style={styles.heroTagline}>{business.tagline}</Text>
-            </View>
-          </ImageBackground>
+          />
 
           <View style={styles.form}>
             <Text style={styles.title}>{texts.loginTitle}</Text>
