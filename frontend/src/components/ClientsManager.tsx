@@ -31,6 +31,12 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newClientPassword, setNewClientPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +53,45 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
   useEffect(() => {
     load();
   }, [load]);
+
+  const openCreate = () => {
+    setNewName("");
+    setNewEmail("");
+    setNewClientPassword("");
+    setShowNewPassword(false);
+    setCreateOpen(true);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setNewClientPassword("");
+  };
+
+  const performCreate = async () => {
+    if (!newName.trim()) {
+      onMessage({ text: "Le nom ne peut pas être vide", kind: "error" });
+      return;
+    }
+    if (!newEmail.trim()) {
+      onMessage({ text: "L'email ne peut pas être vide", kind: "error" });
+      return;
+    }
+    if (newClientPassword.length < 6) {
+      onMessage({ text: "Le mot de passe doit contenir au moins 6 caractères", kind: "error" });
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.createClient(newName.trim(), newEmail.trim().toLowerCase(), newClientPassword);
+      onMessage({ text: `${newName.trim()} ajouté(e) comme client`, kind: "success" });
+      closeCreate();
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur lors de la création", kind: "error" });
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const openEdit = (c: Client) => {
     setEditing(c);
@@ -150,6 +195,11 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
 
   return (
     <View>
+      <TouchableOpacity testID="open-create-client" onPress={openCreate} style={styles.createBtn}>
+        <Ionicons name="person-add-outline" size={18} color="#fff" />
+        <Text style={styles.createBtnText}>Nouveau client</Text>
+      </TouchableOpacity>
+
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
         <TextInput
@@ -290,11 +340,107 @@ export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => v
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <Modal
+        visible={createOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCreate}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalWrap}
+          >
+            <View style={styles.modal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Nouveau client</Text>
+                <TouchableOpacity testID="close-client-create" onPress={closeCreate}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Nom</Text>
+                <TextInput
+                  testID="client-create-name"
+                  value={newName}
+                  onChangeText={setNewName}
+                  style={styles.input}
+                  placeholder="Prénom et nom"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  testID="client-create-email"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="email@exemple.com"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Mot de passe</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    testID="client-create-password"
+                    value={newClientPassword}
+                    onChangeText={setNewClientPassword}
+                    placeholder="6 caractères minimum"
+                    placeholderTextColor={colors.textSecondary}
+                    secureTextEntry={!showNewPassword}
+                    style={[styles.input, styles.passwordInput]}
+                  />
+                  <TouchableOpacity
+                    testID="client-create-toggle-password"
+                    onPress={() => setShowNewPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showNewPassword ? "eye-off-outline" : "eye-outline"}
+                      size={22}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.hint}>
+                  Le client pourra se connecter avec cet email et ce mot de passe.
+                </Text>
+
+                <TouchableOpacity
+                  testID="client-create-submit"
+                  onPress={performCreate}
+                  disabled={creating}
+                  style={[styles.primaryBtn, creating && { opacity: 0.6 }]}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {creating ? "Création…" : "Créer le client"}
+                  </Text>
+                </TouchableOpacity>
+                <View style={{ height: spacing.xl }} />
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  createBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    marginBottom: spacing.md,
+  },
+  createBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
