@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ImageBackground,
+  Image,
   Modal,
 } from "react-native";
 import { useRouter, Link } from "expo-router";
@@ -52,10 +52,10 @@ export default function Login() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ImageBackground
+          <Image
             source={{ uri: images.loginHero }}
             style={styles.hero}
-            imageStyle={{ borderRadius: radius.xl }}
+            resizeMode="cover"
           />
 
           <View style={styles.form}>
