@@ -138,6 +138,11 @@ export const api = {
 
   // Forfaits
   listClients: () => request<{ id: string; name: string; email: string }[]>("/users/clients"),
+  createClient: (name: string, email: string, password: string) =>
+    request<{ id: string; name: string; email: string; role: string }>("/users/clients", {
+      method: "POST",
+      body: { name, email, password },
+    }),
   updateUser: (id: string, payload: { name?: string; email?: string; password?: string }) =>
     request<User>(`/users/${id}`, { method: "PUT", body: payload }),
   deleteUser: (id: string) =>
