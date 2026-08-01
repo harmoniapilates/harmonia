@@ -67,6 +67,7 @@ class ClassCreate(BaseModel):
     capacity: int = 10
     instructor: Optional[str] = ""
     image: Optional[str] = ""
+    client_ids: Optional[List[str]] = None  # private classes: clients to enroll + grant visibility
 
 
 class ClassUpdate(BaseModel):
@@ -424,6 +425,32 @@ async def list_classes(user: dict = Depends(get_current_user)):
         {"_id": 0},
     ).sort("starts_at", 1).to_list(500)
 
+    # Owners see every class. Clients only see group classes, plus private
+    # classes they were explicitly invited to (or already have a booking on,
+    # e.g. added later by the owner via the walk-in "attendance/add" flow).
+    if user.get("role") != "owner":
+        private_ids = [d["id"] for d in docs if d.get("kind") == "private"]
+        booked_private_ids = set()
+        if private_ids:
+            bookings = await db.bookings.find(
+                {
+                    "class_id": {"$in": private_ids},
+                    "user_id": user["id"],
+                    "status": {"$in": ["confirmed", "pending", "attended"]},
+                },
+                {"_id": 0, "class_id": 1},
+            ).to_list(len(private_ids))
+            booked_private_ids = {b["class_id"] for b in bookings}
+
+        def visible(d):
+            if d.get("kind") != "private":
+                return True
+            if user["id"] in (d.get("allowed_client_ids") or []):
+                return True
+            return d["id"] in booked_private_ids
+
+        docs = [d for d in docs if visible(d)]
+
     # Count bookings for ALL classes in a single aggregation query instead of
     # one count_documents() call per class (which was an N+1 query problem:
     # 40 classes on the calendar meant 40 extra round-trips to MongoDB every
@@ -556,9 +583,47 @@ async def restore_class(class_id: str, user: dict = Depends(require_owner)):
 async def create_class(payload: ClassCreate, user: dict = Depends(require_owner)):
     class_id = str(uuid.uuid4())
     doc = payload.dict()
+    client_ids = doc.pop("client_ids", None) or []
     doc["id"] = class_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
+
+    if doc["kind"] == "private" and client_ids:
+        clients = await db.users.find(
+            {"id": {"$in": client_ids}, "role": "client"}, {"_id": 0}
+        ).to_list(len(client_ids))
+        found_ids = {c["id"] for c in clients}
+        missing = set(client_ids) - found_ids
+        if missing:
+            raise HTTPException(status_code=404, detail="Un ou plusieurs clients sélectionnés sont introuvables")
+        doc["allowed_client_ids"] = client_ids
+    else:
+        doc["allowed_client_ids"] = []
+        clients = []
+
     await db.classes.insert_one(doc.copy())
+
+    now_iso = doc["created_at"]
+    for client in clients:
+        booking_id = str(uuid.uuid4())
+        booking = {
+            "id": booking_id,
+            "class_id": class_id,
+            "user_id": client["id"],
+            "user_name": client["name"],
+            "user_email": client["email"],
+            "status": "confirmed",
+            "created_at": now_iso,
+            "class_snapshot": {
+                "title": doc["title"],
+                "category": doc["category"],
+                "kind": doc["kind"],
+                "starts_at": doc["starts_at"],
+                "duration_minutes": doc.get("duration_minutes", 60),
+                "instructor": doc.get("instructor", ""),
+            },
+        }
+        await db.bookings.insert_one(booking.copy())
+
     return await build_class_public(doc)
 
 
