@@ -241,6 +241,7 @@ export type BulkClassInput = {
   instructor?: string;
   image?: string;
   starts_at_list: string[];
+  client_ids?: string[];
 };
 export type ForfaitInput = {
   user_id: string;
