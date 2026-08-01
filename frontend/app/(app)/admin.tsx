@@ -79,6 +79,7 @@ const emptyForm = {
   capacity: "10",
   instructor: "",
   image: "",
+  clientIds: [] as string[],
 };
 
 type FormState = typeof emptyForm;
@@ -142,6 +143,8 @@ export default function Admin() {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState<BulkFormState>(emptyBulkForm);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [formClients, setFormClients] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [formClientSearch, setFormClientSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -162,6 +165,8 @@ export default function Admin() {
 
   const openCreate = () => {
     setForm({ ...emptyForm, date: todayIso(), time: "10:00" });
+    setFormClientSearch("");
+    api.listClients().then(setFormClients).catch(() => {});
     setModalOpen(true);
   };
 
@@ -236,9 +241,13 @@ export default function Admin() {
       setMessage({ text: "Heure invalide (HH:MM)", kind: "error" });
       return;
     }
+    if (form.kind === "private" && !form.id && form.clientIds.length === 0) {
+      setMessage({ text: "Sélectionnez au moins un client pour un cours privé", kind: "error" });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = {
+      const payload: any = {
         title: form.title,
         description: form.description,
         category: form.category,
@@ -249,6 +258,9 @@ export default function Admin() {
         instructor: form.instructor,
         image: form.image,
       };
+      if (form.kind === "private" && !form.id) {
+        payload.client_ids = form.clientIds;
+      }
       if (form.id) {
         await api.updateClass(form.id, payload);
       } else {
@@ -635,6 +647,66 @@ export default function Admin() {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {form.kind === "private" && !form.id && (
+                  <View>
+                    <Text style={styles.formLabel}>
+                      Client(s) invité(s) {form.clientIds.length > 0 ? `(${form.clientIds.length})` : ""}
+                    </Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, marginBottom: spacing.xs }}>
+                      Seuls le propriétaire et les clients sélectionnés pourront voir ce cours.
+                    </Text>
+                    <TextInput
+                      testID="form-private-client-search"
+                      value={formClientSearch}
+                      onChangeText={setFormClientSearch}
+                      placeholder="Rechercher un client…"
+                      placeholderTextColor={colors.textSecondary}
+                      style={styles.input}
+                    />
+                    <View style={{ maxHeight: 220 }}>
+                      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                        {formClients
+                          .filter((c) => {
+                            const q = formClientSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                          })
+                          .map((c) => {
+                            const selected = form.clientIds.includes(c.id);
+                            return (
+                              <TouchableOpacity
+                                key={c.id}
+                                testID={`form-private-client-${c.id}`}
+                                onPress={() =>
+                                  setForm({
+                                    ...form,
+                                    clientIds: selected
+                                      ? form.clientIds.filter((id) => id !== c.id)
+                                      : [...form.clientIds, c.id],
+                                  })
+                                }
+                                style={[
+                                  styles.walkInRow,
+                                  selected && { backgroundColor: colors.primary + "1A" },
+                                ]}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.attendeeName}>{c.name}</Text>
+                                  <Text style={styles.attendeeMeta}>{c.email}</Text>
+                                </View>
+                                <Ionicons
+                                  name={selected ? "checkbox" : "square-outline"}
+                                  size={22}
+                                  color={selected ? colors.primary : colors.textSecondary}
+                                />
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                )}
 
                 <View style={styles.rowInputs}>
                   <View style={{ flex: 1 }}>
