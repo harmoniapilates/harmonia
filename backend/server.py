@@ -637,6 +637,7 @@ class ClassBulkCreate(BaseModel):
     instructor: Optional[str] = ""
     image: Optional[str] = ""
     starts_at_list: List[str]
+    client_ids: Optional[List[str]] = None  # private series: clients to enroll + grant visibility
 
 
 @api_router.post("/classes/bulk", response_model=List[ClassPublic])
@@ -645,6 +646,17 @@ async def create_classes_bulk(payload: ClassBulkCreate, user: dict = Depends(req
         raise HTTPException(status_code=400, detail="Aucune date fournie")
     if len(payload.starts_at_list) > 200:
         raise HTTPException(status_code=400, detail="Trop de dates (max 200)")
+
+    client_ids = payload.client_ids or []
+    clients = []
+    if payload.kind == "private" and client_ids:
+        clients = await db.users.find(
+            {"id": {"$in": client_ids}, "role": "client"}, {"_id": 0}
+        ).to_list(len(client_ids))
+        found_ids = {c["id"] for c in clients}
+        missing = set(client_ids) - found_ids
+        if missing:
+            raise HTTPException(status_code=404, detail="Un ou plusieurs clients sélectionnés sont introuvables")
 
     now_iso = datetime.now(timezone.utc).isoformat()
     docs = []
@@ -661,8 +673,34 @@ async def create_classes_bulk(payload: ClassBulkCreate, user: dict = Depends(req
             "instructor": payload.instructor or "",
             "image": payload.image or "",
             "created_at": now_iso,
+            "allowed_client_ids": client_ids if payload.kind == "private" else [],
         })
     await db.classes.insert_many([d.copy() for d in docs])
+
+    if clients:
+        bookings = []
+        for d in docs:
+            for client in clients:
+                bookings.append({
+                    "id": str(uuid.uuid4()),
+                    "class_id": d["id"],
+                    "user_id": client["id"],
+                    "user_name": client["name"],
+                    "user_email": client["email"],
+                    "status": "confirmed",
+                    "created_at": now_iso,
+                    "class_snapshot": {
+                        "title": d["title"],
+                        "category": d["category"],
+                        "kind": d["kind"],
+                        "starts_at": d["starts_at"],
+                        "duration_minutes": d.get("duration_minutes", 60),
+                        "instructor": d.get("instructor", ""),
+                    },
+                })
+        if bookings:
+            await db.bookings.insert_many([b.copy() for b in bookings])
+
     results = []
     for d in docs:
         d.pop("_id", None)
