@@ -222,6 +222,7 @@ export type ClassInput = {
   capacity: number;
   instructor?: string;
   image?: string;
+  client_ids?: string[];
 };
 export type ClassItem = ClassInput & {
   id: string;
