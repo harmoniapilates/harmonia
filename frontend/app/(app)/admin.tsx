@@ -101,6 +101,7 @@ const emptyBulkForm = {
   image: "",
   weeks: "4",
   days: [false, false, false, false, false, false, false] as boolean[],
+  clientIds: [] as string[],
 };
 
 type BulkFormState = typeof emptyBulkForm;
@@ -172,6 +173,8 @@ export default function Admin() {
 
   const openBulk = () => {
     setBulkForm({ ...emptyBulkForm, startDate: todayIso() });
+    setFormClientSearch("");
+    api.listClients().then(setFormClients).catch(() => {});
     setBulkModalOpen(true);
   };
 
@@ -186,6 +189,10 @@ export default function Admin() {
       setMessage({ text: "Vérifiez la date, l'heure et les jours sélectionnés", kind: "error" });
       return;
     }
+    if (bulkForm.kind === "private" && bulkForm.clientIds.length === 0) {
+      setMessage({ text: "Sélectionnez au moins un client pour une série privée", kind: "error" });
+      return;
+    }
     setBulkSaving(true);
     try {
       const created = await api.bulkCreateClasses({
@@ -198,6 +205,7 @@ export default function Admin() {
         instructor: bulkForm.instructor,
         image: bulkForm.image,
         starts_at_list: dates,
+        client_ids: bulkForm.kind === "private" ? bulkForm.clientIds : undefined,
       });
       setBulkModalOpen(false);
       setMessage({ text: `${created.length} cours créés avec succès`, kind: "success" });
@@ -861,6 +869,66 @@ export default function Admin() {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {bulkForm.kind === "private" && (
+                  <View>
+                    <Text style={styles.formLabel}>
+                      Client(s) invité(s) {bulkForm.clientIds.length > 0 ? `(${bulkForm.clientIds.length})` : ""}
+                    </Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: fontSizes.sm, marginBottom: spacing.xs }}>
+                      Seuls le propriétaire et les clients sélectionnés pourront voir ces cours.
+                    </Text>
+                    <TextInput
+                      testID="bulk-private-client-search"
+                      value={formClientSearch}
+                      onChangeText={setFormClientSearch}
+                      placeholder="Rechercher un client…"
+                      placeholderTextColor={colors.textSecondary}
+                      style={styles.input}
+                    />
+                    <View style={{ maxHeight: 220 }}>
+                      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                        {formClients
+                          .filter((c) => {
+                            const q = formClientSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                          })
+                          .map((c) => {
+                            const selected = bulkForm.clientIds.includes(c.id);
+                            return (
+                              <TouchableOpacity
+                                key={c.id}
+                                testID={`bulk-private-client-${c.id}`}
+                                onPress={() =>
+                                  setBulkForm({
+                                    ...bulkForm,
+                                    clientIds: selected
+                                      ? bulkForm.clientIds.filter((id) => id !== c.id)
+                                      : [...bulkForm.clientIds, c.id],
+                                  })
+                                }
+                                style={[
+                                  styles.walkInRow,
+                                  selected && { backgroundColor: colors.primary + "1A" },
+                                ]}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.attendeeName}>{c.name}</Text>
+                                  <Text style={styles.attendeeMeta}>{c.email}</Text>
+                                </View>
+                                <Ionicons
+                                  name={selected ? "checkbox" : "square-outline"}
+                                  size={22}
+                                  color={selected ? colors.primary : colors.textSecondary}
+                                />
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                )}
 
                 <View style={styles.rowInputs}>
                   <View style={{ flex: 1 }}>
