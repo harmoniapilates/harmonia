@@ -73,6 +73,13 @@ function loadCache(): CachedTheme {
 }
 
 const cached = loadCache();
+// Snapshot at import time: true only on a device/browser that has never
+// fetched branding before (empty localStorage cache). Used once, right after
+// app boot, to know whether we need a one-time reload so the very first
+// visit shows the real custom branding instead of the static defaults.
+export function hadCachedThemeOnBoot(): boolean {
+  return Object.keys(cached).length > 0;
+}
 
 // ---------- Merge cache over static defaults ----------
 export const colors = {
