@@ -366,6 +366,8 @@ async def me(user: dict = Depends(get_current_user)):
     return UserPublic(id=user["id"], email=user["email"], name=user["name"], role=user["role"])
 
 
+
+
 # ============ Settings Routes ============
 @api_router.get("/settings/public", response_model=AppSettings)
 async def get_public_settings():
@@ -495,16 +497,26 @@ def build_class_public_with_count(cls: dict, booked: int) -> ClassPublic:
 
 
 async def _auto_archive_classes() -> int:
-    """Archive classes that ended more than 4 hours ago."""
+    """Archive classes that ended more than 4 hours ago — unless they were
+    manually restored recently (restored_until in the future), so a
+    just-restored class stays visible until the next day instead of being
+    swept back into the archive on the very next calendar refresh."""
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=4)
     cutoff_iso = cutoff.isoformat()
+    now_iso = now.isoformat()
     result = await db.classes.update_many(
         {
-            "$or": [{"archived": {"$exists": False}}, {"archived": False}],
-            "starts_at": {"$lt": cutoff_iso},
+            "$and": [
+                {"$or": [{"archived": {"$exists": False}}, {"archived": False}]},
+                {"starts_at": {"$lt": cutoff_iso}},
+                {"$or": [
+                    {"restored_until": {"$exists": False}},
+                    {"restored_until": {"$lt": now_iso}},
+                ]},
+            ]
         },
-        {"$set": {"archived": True, "archived_at": now.isoformat()}},
+        {"$set": {"archived": True, "archived_at": now.isoformat()}, "$unset": {"restored_until": ""}},
     )
     return result.modified_count
 
@@ -561,7 +573,7 @@ async def archive_class(class_id: str, user: dict = Depends(require_owner)):
     now_iso = datetime.now(timezone.utc).isoformat()
     result = await db.classes.update_one(
         {"id": class_id},
-        {"$set": {"archived": True, "archived_at": now_iso}},
+        {"$set": {"archived": True, "archived_at": now_iso}, "$unset": {"restored_until": ""}},
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Cours introuvable")
@@ -570,9 +582,10 @@ async def archive_class(class_id: str, user: dict = Depends(require_owner)):
 
 @api_router.post("/classes/{class_id}/restore")
 async def restore_class(class_id: str, user: dict = Depends(require_owner)):
+    restored_until = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
     result = await db.classes.update_one(
         {"id": class_id},
-        {"$set": {"archived": False}, "$unset": {"archived_at": ""}},
+        {"$set": {"archived": False, "restored_until": restored_until}, "$unset": {"archived_at": ""}},
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Cours introuvable")
