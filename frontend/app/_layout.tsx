@@ -6,7 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/auth";
-import { branding, colors, refreshThemeFromBackend } from "@/src/theme";
+import { branding, colors, refreshThemeFromBackend, hadCachedThemeOnBoot } from "@/src/theme";
 import InstallPrompt from "@/src/components/InstallPrompt";
 
 LogBox.ignoreAllLogs(true);
@@ -131,9 +131,20 @@ if (Platform.OS === "web" && typeof window !== "undefined" && typeof document !=
     }
 
     // Fetch fresh branding/theme from the backend. Values are cached in
-    // localStorage and applied on the NEXT page load — the current render still
-    // uses whatever was cached previously (or the built-in defaults).
-    refreshThemeFromBackend(backend).catch(() => {});
+    // localStorage. On a normal reload the NEXT load already picks them up.
+    // But on a device's very first-ever visit (no cache yet at all), that
+    // would mean seeing the generic default hero image for the whole first
+    // session — so in that one case only, reload automatically once the
+    // real branding has been fetched and cached, so even the first visit
+    // shows the owner's actual chosen image.
+    const isFirstEverVisit = !hadCachedThemeOnBoot();
+    refreshThemeFromBackend(backend)
+      .then(() => {
+        if (isFirstEverVisit && typeof window !== "undefined") {
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
   } catch {
     // ignore
   }
