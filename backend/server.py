@@ -128,7 +128,7 @@ class BrandingColors(BaseModel):
 
 
 class BrandingImages(BaseModel):
-    loginHero: str = "https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    loginHero: str = "https://www.serenabollino.com/fr/app/images/login.jpg"
     yoga: str = "https://images.pexels.com/photos/6787357/pexels-photo-6787357.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
     pilates: str = "https://images.pexels.com/photos/4325466/pexels-photo-4325466.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
     massage: str = "https://images.pexels.com/photos/3757942/pexels-photo-3757942.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
