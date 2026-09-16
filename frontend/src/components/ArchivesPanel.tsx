@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +15,11 @@ import { formatFrenchDateTime } from "@/src/utils/date";
 
 type Msg = { text: string; kind: "success" | "error" };
 type Kind = "classes" | "forfaits";
+
+const KIND_LABELS: Record<string, string> = {
+  group: "Collectif",
+  private: "Individuel",
+};
 
 type ArchivedClass = {
   id: string;
@@ -35,6 +41,7 @@ type ArchivedForfaitGroup = {
     id: string;
     name: string;
     category: string | null;
+    kind: string | null;
     total_classes: number;
     remaining_classes: number;
     created_at: string;
@@ -58,6 +65,8 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
   const [expandedClass, setExpandedClass] = useState<Record<string, boolean>>({});
   const [expandedForfait, setExpandedForfait] = useState<Record<string, boolean>>({});
   const [expandedUser, setExpandedUser] = useState<Record<string, boolean>>({});
+  const [classSearch, setClassSearch] = useState("");
+  const [forfaitSearch, setForfaitSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,6 +137,28 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
     }
   };
 
+  const filteredClasses = classes.filter((c) => {
+    const q = classSearch.trim().toLowerCase();
+    if (!q) return true;
+    if (c.title?.toLowerCase().includes(q)) return true;
+    if (c.category?.toLowerCase().includes(q)) return true;
+    if (c.instructor?.toLowerCase().includes(q)) return true;
+    return c.attendees.some(
+      (a) => a.name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q),
+    );
+  });
+
+  const filteredForfaitGroups = forfaitGroups.filter((g) => {
+    const q = forfaitSearch.trim().toLowerCase();
+    if (!q) return true;
+    if (g.user_name?.toLowerCase().includes(q) || g.user_email?.toLowerCase().includes(q)) {
+      return true;
+    }
+    return g.forfaits.some(
+      (f) => f.name?.toLowerCase().includes(q) || f.category?.toLowerCase().includes(q),
+    );
+  });
+
   return (
     <View>
       <View style={styles.tabsRow}>
@@ -151,16 +182,34 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
         </TouchableOpacity>
       </View>
 
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+        <TextInput
+          testID="archives-search"
+          value={kind === "classes" ? classSearch : forfaitSearch}
+          onChangeText={kind === "classes" ? setClassSearch : setForfaitSearch}
+          placeholder={
+            kind === "classes"
+              ? "Rechercher un cours ou un client…"
+              : "Rechercher un client ou un forfait…"
+          }
+          placeholderTextColor={colors.textSecondary}
+          style={styles.searchInput}
+        />
+      </View>
+
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
       ) : kind === "classes" ? (
-        classes.length === 0 ? (
+        filteredClasses.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="archive-outline" size={40} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Aucun cours archivé</Text>
+            <Text style={styles.emptyText}>
+              {classSearch ? "Aucun résultat" : "Aucun cours archivé"}
+            </Text>
           </View>
         ) : (
-          classes.map((c) => {
+          filteredClasses.map((c) => {
             const open = expandedClass[c.id];
             const attendedList = c.attendees.filter((a) => a.status === "attended");
             const notAttended = c.attendees.filter(
@@ -262,13 +311,15 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
             );
           })
         )
-      ) : forfaitGroups.length === 0 ? (
+      ) : filteredForfaitGroups.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="archive-outline" size={40} color={colors.textSecondary} />
-          <Text style={styles.emptyText}>Aucun forfait archivé</Text>
+          <Text style={styles.emptyText}>
+            {forfaitSearch ? "Aucun résultat" : "Aucun forfait archivé"}
+          </Text>
         </View>
       ) : (
-        forfaitGroups.map((g) => {
+        filteredForfaitGroups.map((g) => {
           const open = expandedUser[g.user_id];
           return (
             <View key={g.user_id} style={styles.card}>
@@ -305,6 +356,7 @@ export default function ArchivesPanel({ onMessage }: { onMessage: (m: Msg) => vo
                             <Text style={styles.meta}>
                               {f.total_classes - f.remaining_classes} / {f.total_classes} séances utilisées
                               {f.category ? ` · ${f.category}` : ""}
+                              {f.kind ? ` · ${KIND_LABELS[f.kind] || f.kind}` : ""}
                             </Text>
                             <Text style={styles.metaSmall}>
                               Archivé le {formatFrenchDateTime(f.archived_at)}
@@ -392,6 +444,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    color: colors.textPrimary,
+    fontSize: fontSizes.md,
+  },
   tabText: { color: colors.textPrimary, fontSize: fontSizes.sm },
   tabTextActive: { color: "#fff", fontWeight: "600" },
   empty: { alignItems: "center", padding: spacing.xl },

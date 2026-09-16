@@ -30,6 +30,17 @@ const CAT_LABELS: Record<string, string> = {
   massage: "Massages",
 };
 
+const KINDS = [
+  { key: "", label: "Tous" },
+  { key: "group", label: "Collectif" },
+  { key: "private", label: "Individuel" },
+];
+
+const KIND_LABELS: Record<string, string> = {
+  group: "Collectif",
+  private: "Individuel",
+};
+
 const emptyForm = {
   id: "",
   user_id: "",
@@ -37,6 +48,7 @@ const emptyForm = {
   total_classes: "10",
   remaining_classes: "10",
   category: "",
+  kind: "",
   expires_at: "",
   active: true,
 };
@@ -84,6 +96,7 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -134,6 +147,7 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
       total_classes: String(f.total_classes),
       remaining_classes: String(f.remaining_classes),
       category: f.category || "",
+      kind: f.kind || "",
       expires_at: isoDateOnly(f.expires_at),
       active: f.active,
     });
@@ -164,6 +178,7 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
           total_classes: total,
           remaining_classes: isNaN(remaining) ? 0 : remaining,
           category: form.category || null,
+          kind: form.kind || null,
           expires_at: expIso,
           active: form.active,
         } as any);
@@ -173,6 +188,7 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
           name: form.name,
           total_classes: total,
           category: form.category || null,
+          kind: form.kind || null,
           expires_at: expIso,
         });
       }
@@ -210,6 +226,11 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
   };
 
   const selectedClient = clients.find((c) => c.id === form.user_id);
+  const filteredClients = clients.filter((c) => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+  });
 
   if (loading) {
     return <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />;
@@ -250,6 +271,13 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
                     </Text>
                   ) : (
                     <Text style={styles.cardMeta}>Toutes catégories</Text>
+                  )}
+                  {f.kind ? (
+                    <Text style={styles.cardMeta}>
+                      Type : {KIND_LABELS[f.kind] || f.kind}
+                    </Text>
+                  ) : (
+                    <Text style={styles.cardMeta}>Tous types</Text>
                   )}
                   {expDate && (
                     <Text style={[styles.cardMeta, expired && { color: colors.error, fontWeight: "600" }]}>
@@ -417,6 +445,29 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
                   Un forfait sans catégorie peut être utilisé pour tous les cours.
                 </Text>
 
+                <Text style={styles.formLabel}>Type de forfait</Text>
+                <View style={styles.chipsRow}>
+                  {KINDS.map((k) => {
+                    const active = form.kind === k.key;
+                    return (
+                      <TouchableOpacity
+                        key={k.key || "all"}
+                        testID={`forfait-kind-${k.key || "all"}`}
+                        onPress={() => setForm({ ...form, kind: k.key })}
+                        style={[
+                          styles.chip,
+                          active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                        ]}
+                      >
+                        <Text style={[styles.chipText, active && { color: "#fff" }]}>{k.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.hint}>
+                  Collectif = cours de groupe, Individuel = séances privées. « Tous » couvre les deux.
+                </Text>
+
                 <Text style={styles.formLabel}>Date d&apos;expiration (facultatif)</Text>
                 <TextInput
                   testID="forfait-expiry"
@@ -452,29 +503,49 @@ export default function ForfaitsManager({ onMessage, initialUserId, initialMode,
         visible={clientPickerOpen}
         animationType="slide"
         transparent
-        onRequestClose={() => setClientPickerOpen(false)}
+        onRequestClose={() => {
+          setClientPickerOpen(false);
+          setClientSearch("");
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modal, { maxHeight: "70%" }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choisir un client</Text>
-              <TouchableOpacity onPress={() => setClientPickerOpen(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setClientPickerOpen(false);
+                  setClientSearch("");
+                }}
+              >
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                testID="forfait-client-search"
+                value={clientSearch}
+                onChangeText={setClientSearch}
+                placeholder="Rechercher un client…"
+                placeholderTextColor={colors.textSecondary}
+                style={styles.searchInput}
+              />
+            </View>
             <ScrollView>
-              {clients.length === 0 ? (
+              {filteredClients.length === 0 ? (
                 <Text style={{ color: colors.textSecondary, padding: spacing.md }}>
-                  Aucun client enregistré.
+                  Aucun client trouvé.
                 </Text>
               ) : (
-                clients.map((c) => (
+                filteredClients.map((c) => (
                   <TouchableOpacity
                     key={c.id}
                     testID={`client-option-${c.id}`}
                     onPress={() => {
                       setForm({ ...form, user_id: c.id });
                       setClientPickerOpen(false);
+                      setClientSearch("");
                     }}
                     style={styles.clientRow}
                   >
@@ -639,4 +710,22 @@ const styles = StyleSheet.create({
   },
   clientName: { color: colors.textPrimary, fontSize: fontSizes.md, fontWeight: "500" },
   clientEmail: { color: colors.textSecondary, fontSize: fontSizes.xs, marginTop: 2 },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: fontSizes.md,
+  },
 });
