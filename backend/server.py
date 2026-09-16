@@ -209,6 +209,7 @@ class ForfaitCreate(BaseModel):
     name: str
     total_classes: int
     category: Optional[str] = None  # yoga | pilates | massage | None (any)
+    kind: Optional[str] = None  # group (collectif) | private (individuel) | None (any)
     expires_at: Optional[str] = None
 
 
@@ -217,6 +218,7 @@ class ForfaitUpdate(BaseModel):
     total_classes: Optional[int] = None
     remaining_classes: Optional[int] = None
     category: Optional[str] = None
+    kind: Optional[str] = None
     expires_at: Optional[str] = None
     active: Optional[bool] = None
 
@@ -238,6 +240,7 @@ class ForfaitPublic(BaseModel):
     total_classes: int
     remaining_classes: int
     category: Optional[str] = None
+    kind: Optional[str] = None
     expires_at: Optional[str] = None
     active: bool
     created_at: str
@@ -871,6 +874,7 @@ async def mark_attendance(booking_id: str, user: dict = Depends(require_owner)):
 
     # Try to consume a matching forfait (not expired)
     category = (booking.get("class_snapshot") or {}).get("category")
+    class_kind = (booking.get("class_snapshot") or {}).get("kind")
     class_title = (booking.get("class_snapshot") or {}).get("title", "")
     starts_at = (booking.get("class_snapshot") or {}).get("starts_at")
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -880,6 +884,7 @@ async def mark_attendance(booking_id: str, user: dict = Depends(require_owner)):
         "remaining_classes": {"$gt": 0},
         "$and": [
             {"$or": [{"category": None}, {"category": category}]},
+            {"$or": [{"kind": None}, {"kind": {"$exists": False}}, {"kind": class_kind}]},
             {"$or": [{"expires_at": None}, {"expires_at": {"$gt": now_iso}}]},
         ],
     }
@@ -1088,12 +1093,14 @@ async def _apply_forfaits_to_uncovered(user_id: str) -> int:
             # Only cover bookings whose class has already started/finished
             continue
         category = (b.get("class_snapshot") or {}).get("category")
+        class_kind = (b.get("class_snapshot") or {}).get("kind")
         criteria = {
             "user_id": user_id,
             "active": True,
             "remaining_classes": {"$gt": 0},
             "$and": [
                 {"$or": [{"category": None}, {"category": category}]},
+                {"$or": [{"kind": None}, {"kind": {"$exists": False}}, {"kind": class_kind}]},
                 {"$or": [{"expires_at": None}, {"expires_at": {"$gt": now_iso}}]},
             ],
         }
@@ -1341,6 +1348,7 @@ async def create_forfait(payload: ForfaitCreate, user: dict = Depends(require_ow
         "total_classes": payload.total_classes,
         "remaining_classes": payload.total_classes,
         "category": payload.category or None,
+        "kind": payload.kind or None,
         "expires_at": payload.expires_at or None,
         "active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1415,6 +1423,7 @@ async def list_archived_forfaits(user: dict = Depends(require_owner)):
                 "id": d["id"],
                 "name": d.get("name"),
                 "category": d.get("category"),
+                "kind": d.get("kind"),
                 "total_classes": d.get("total_classes"),
                 "remaining_classes": d.get("remaining_classes"),
                 "created_at": d.get("created_at"),
