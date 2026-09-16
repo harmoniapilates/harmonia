@@ -248,6 +248,7 @@ export type ForfaitInput = {
   name: string;
   total_classes: number;
   category?: string | null;
+  kind?: string | null;
   expires_at?: string | null;
 };
 export type ConsumedBookingItem = {
@@ -266,6 +267,7 @@ export type Forfait = {
   total_classes: number;
   remaining_classes: number;
   category?: string | null;
+  kind?: string | null;
   expires_at?: string | null;
   active: boolean;
   archived?: boolean;
