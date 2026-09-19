@@ -1,0 +1,579 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
+import { api } from "@/src/api/client";
+import { colors, spacing, radius, fontSizes } from "@/src/theme";
+
+type Client = { id: string; name: string; email: string };
+type Msg = { text: string; kind: "success" | "error" };
+
+export default function ClientsManager({ onMessage }: { onMessage: (m: Msg) => void }) {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<Client | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newClientPassword, setNewClientPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await api.listClients();
+      setClients(list);
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur de chargement", kind: "error" });
+    } finally {
+      setLoading(false);
+    }
+  }, [onMessage]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openCreate = () => {
+    setNewName("");
+    setNewEmail("");
+    setNewClientPassword("");
+    setShowNewPassword(false);
+    setCreateOpen(true);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setNewClientPassword("");
+  };
+
+  const performCreate = async () => {
+    if (!newName.trim()) {
+      onMessage({ text: "Le nom ne peut pas être vide", kind: "error" });
+      return;
+    }
+    if (!newEmail.trim()) {
+      onMessage({ text: "L'email ne peut pas être vide", kind: "error" });
+      return;
+    }
+    if (newClientPassword.length < 6) {
+      onMessage({ text: "Le mot de passe doit contenir au moins 6 caractères", kind: "error" });
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.createClient(newName.trim(), newEmail.trim().toLowerCase(), newClientPassword);
+      onMessage({ text: `${newName.trim()} ajouté(e) comme client`, kind: "success" });
+      closeCreate();
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur lors de la création", kind: "error" });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openEdit = (c: Client) => {
+    setEditing(c);
+    setEditName(c.name);
+    setEditEmail(c.email);
+    setNewPassword("");
+    setShowPassword(false);
+  };
+
+  const closeEdit = () => {
+    setEditing(null);
+    setNewPassword("");
+  };
+
+  const performDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const res = await api.deleteUser(editing.id);
+      onMessage({
+        text:
+          res.deleted_bookings > 0
+            ? `${editing.name} supprimé (${res.deleted_bookings} réservation(s) annulée(s))`
+            : `${editing.name} supprimé`,
+        kind: "success",
+      });
+      closeEdit();
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur de suppression", kind: "error" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const askDelete = () => {
+    if (!editing) return;
+    if (Platform.OS === "web") {
+      // eslint-disable-next-line no-alert
+      if (
+        typeof window !== "undefined" &&
+        window.confirm(
+          `Supprimer définitivement le compte de ${editing.name} ? Toutes ses réservations et forfaits seront effacés.`,
+        )
+      ) {
+        performDelete();
+      }
+      return;
+    }
+    Alert.alert(
+      "Supprimer le client",
+      `Supprimer définitivement le compte de ${editing.name} ? Toutes ses réservations et forfaits seront effacés.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Supprimer", style: "destructive", onPress: performDelete },
+      ],
+    );
+  };
+
+  const save = async () => {
+    if (!editing) return;
+    if (!editName.trim()) {
+      onMessage({ text: "Le nom ne peut pas être vide", kind: "error" });
+      return;
+    }
+    if (newPassword && newPassword.length < 6) {
+      onMessage({ text: "Le mot de passe doit contenir au moins 6 caractères", kind: "error" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: { name?: string; email?: string; password?: string } = {};
+      if (editName !== editing.name) payload.name = editName.trim();
+      if (editEmail !== editing.email) payload.email = editEmail.trim().toLowerCase();
+      if (newPassword) payload.password = newPassword;
+      if (Object.keys(payload).length === 0) {
+        closeEdit();
+        return;
+      }
+      await api.updateUser(editing.id, payload);
+      onMessage({
+        text: newPassword
+          ? `Compte de ${editName} mis à jour et mot de passe réinitialisé`
+          : `Compte de ${editName} mis à jour`,
+        kind: "success",
+      });
+      closeEdit();
+      await load();
+    } catch (e: any) {
+      onMessage({ text: e?.message || "Erreur de mise à jour", kind: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = clients.filter((c) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+  });
+
+  return (
+    <View>
+      <TouchableOpacity testID="open-create-client" onPress={openCreate} style={styles.createBtn}>
+        <Ionicons name="person-add-outline" size={18} color="#fff" />
+        <Text style={styles.createBtnText}>Nouveau client</Text>
+      </TouchableOpacity>
+
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+        <TextInput
+          testID="clients-search"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Rechercher un client…"
+          placeholderTextColor={colors.textSecondary}
+          style={styles.searchInput}
+          autoComplete="off"
+          autoCorrect={false}
+          autoCapitalize="none"
+          textContentType="none"
+          importantForAutofill="no"
+        />
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
+      ) : filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Ionicons name="people-outline" size={40} color={colors.textSecondary} />
+          <Text style={styles.emptyText}>
+            {clients.length === 0 ? "Aucun client inscrit" : "Aucun résultat"}
+          </Text>
+        </View>
+      ) : (
+        filtered.map((c) => (
+          <View key={c.id} style={styles.row} testID={`client-row-${c.id}`}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{c.name?.[0]?.toUpperCase() || "?"}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{c.name}</Text>
+              <Text style={styles.email}>{c.email}</Text>
+            </View>
+            <TouchableOpacity
+              testID={`edit-client-${c.id}`}
+              onPress={() => openEdit(c)}
+              style={styles.editBtn}
+            >
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <Text style={styles.editText}>Gérer</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+
+      <Modal
+        visible={!!editing}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEdit}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalWrap}
+          >
+            <View style={styles.modal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Gérer le client</Text>
+                <TouchableOpacity testID="close-client-edit" onPress={closeEdit}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Nom</Text>
+                <TextInput
+                  testID="client-edit-name"
+                  value={editName}
+                  onChangeText={setEditName}
+                  style={styles.input}
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  testID="client-edit-email"
+                  value={editEmail}
+                  onChangeText={setEditEmail}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Nouveau mot de passe</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    testID="client-edit-password"
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    placeholder="Laisser vide pour ne pas changer"
+                    placeholderTextColor={colors.textSecondary}
+                    secureTextEntry={!showPassword}
+                    style={[styles.input, styles.passwordInput]}
+                  />
+                  <TouchableOpacity
+                    testID="client-toggle-password"
+                    onPress={() => setShowPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={22}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.hint}>
+                  Le client pourra se connecter avec ce nouveau mot de passe dès son enregistrement.
+                </Text>
+
+                <TouchableOpacity
+                  testID="client-save-btn"
+                  onPress={save}
+                  disabled={saving || deleting}
+                  style={[styles.primaryBtn, (saving || deleting) && { opacity: 0.6 }]}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {saving ? "Enregistrement…" : "Enregistrer"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="client-delete-btn"
+                  onPress={askDelete}
+                  disabled={saving || deleting}
+                  style={[styles.dangerBtn, (saving || deleting) && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.error} />
+                  <Text style={styles.dangerBtnText}>
+                    {deleting ? "Suppression…" : "Supprimer ce client"}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.dangerHint}>
+                  Cette action est irréversible et efface aussi ses réservations et forfaits.
+                </Text>
+                <View style={{ height: spacing.xl }} />
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={createOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCreate}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalWrap}
+          >
+            <View style={styles.modal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Nouveau client</Text>
+                <TouchableOpacity testID="close-client-create" onPress={closeCreate}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Nom</Text>
+                <TextInput
+                  testID="client-create-name"
+                  value={newName}
+                  onChangeText={setNewName}
+                  style={styles.input}
+                  placeholder="Prénom et nom"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  testID="client-create-email"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="email@exemple.com"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Mot de passe</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    testID="client-create-password"
+                    value={newClientPassword}
+                    onChangeText={setNewClientPassword}
+                    placeholder="6 caractères minimum"
+                    placeholderTextColor={colors.textSecondary}
+                    secureTextEntry={!showNewPassword}
+                    style={[styles.input, styles.passwordInput]}
+                  />
+                  <TouchableOpacity
+                    testID="client-create-toggle-password"
+                    onPress={() => setShowNewPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showNewPassword ? "eye-off-outline" : "eye-outline"}
+                      size={22}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.hint}>
+                  Le client pourra se connecter avec cet email et ce mot de passe.
+                </Text>
+
+                <TouchableOpacity
+                  testID="client-create-submit"
+                  onPress={performCreate}
+                  disabled={creating}
+                  style={[styles.primaryBtn, creating && { opacity: 0.6 }]}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {creating ? "Création…" : "Créer le client"}
+                  </Text>
+                </TouchableOpacity>
+                <View style={{ height: spacing.xl }} />
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  createBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    marginBottom: spacing.md,
+  },
+  createBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    paddingLeft: 6,
+    color: colors.textPrimary,
+    fontSize: fontSizes.md,
+  },
+  empty: { alignItems: "center", padding: spacing.xl },
+  emptyText: { color: colors.textSecondary, marginTop: spacing.sm },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: spacing.sm,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
+  name: { color: colors.textPrimary, fontSize: fontSizes.md, fontWeight: "500" },
+  email: { color: colors.textSecondary, fontSize: fontSizes.xs, marginTop: 2 },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  editText: { color: colors.primary, fontWeight: "600", fontSize: fontSizes.sm },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalWrap: { maxHeight: "92%" },
+  modal: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.lg,
+    maxHeight: "100%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  modalTitle: { fontSize: fontSizes.xl, color: colors.textPrimary, fontWeight: "500" },
+  label: {
+    fontSize: fontSizes.xs,
+    letterSpacing: 2,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    fontSize: fontSizes.md,
+    color: colors.textPrimary,
+    backgroundColor: colors.surfaceElevated,
+  },
+  passwordRow: { position: "relative" },
+  passwordInput: { paddingRight: 48 },
+  eyeBtn: {
+    position: "absolute",
+    right: 8,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hint: { fontSize: fontSizes.xs, color: colors.textSecondary, marginTop: 6 },
+  primaryBtn: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary,
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    alignItems: "center",
+  },
+  primaryBtnText: { color: "#fff", fontWeight: "600", fontSize: fontSizes.md },
+  dangerBtn: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.error,
+    backgroundColor: "transparent",
+    padding: spacing.md,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  dangerBtnText: { color: colors.error, fontWeight: "600", fontSize: fontSizes.md },
+  dangerHint: {
+    marginTop: 6,
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+});
